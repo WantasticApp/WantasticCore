@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="peersGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="35" cy="30" r="12" fill="url(#peersGrad)" opacity="0.9"/>
+  <path d="M35 45 Q20 50 20 65 L50 65 Q50 50 35 45 Z" fill="url(#peersGrad)" opacity="0.9"/>
+  <circle cx="65" cy="30" r="12" fill="url(#peersGrad)" opacity="0.9"/>
+  <path d="M65 45 Q50 50 50 65 L80 65 Q80 50 65 45 Z" fill="url(#peersGrad)" opacity="0.9"/>
+  <circle cx="50" cy="55" r="10" fill="url(#peersGrad)"/>
+  <path d="M50 67 Q38 70 38 82 L62 82 Q62 70 50 67 Z" fill="url(#peersGrad)"/>
+</svg>

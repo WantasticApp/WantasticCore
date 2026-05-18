@@ -1,0 +1,58 @@
+# Dependabot configuration.
+#
+# Goals:
+#   - Keep Go modules and the SPA's pnpm tree patched automatically.
+#   - Batch patch-level bumps into a single weekly PR so they don't drown
+#     the issue tracker.
+#   - Hold back the Svelte 3 → 4/5 line and the Vite 4 → 5 line: those
+#     require a coordinated ecosystem migration (vite-plugin-svelte +
+#     svelte-check + the app code itself) that doesn't belong in an
+#     auto-bump PR.
+
+version: 2
+updates:
+  # ── Go modules ──────────────────────────────────────────────────────
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      patches:
+        applies-to: version-updates
+        update-types: ["patch"]
+    open-pull-requests-limit: 5
+
+  # ── SPA pnpm tree (transitive: dependabot reads pnpm-lock.yaml) ─────
+  - package-ecosystem: npm
+    directory: "/internal/portalsrv/app"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      patches:
+        applies-to: version-updates
+        update-types: ["patch"]
+    ignore:
+      # Held back pending Svelte 3 → 5 migration. The advisories on this
+      # range are all in SSR code paths; this app is pure CSR so they
+      # are not exploitable, but the audit signal will stay until we
+      # migrate.
+      - dependency-name: svelte
+      - dependency-name: "@sveltejs/vite-plugin-svelte"
+      - dependency-name: svelte-check
+      - dependency-name: svelte-preprocess
+      # Held back pending the Vite 4 → 5 migration (tied to the Svelte
+      # 5 effort via the plugin's peer-dep range). Affects dev server
+      # only; the deployed bundle does not include Vite.
+      - dependency-name: vite
+      - dependency-name: vitest
+    open-pull-requests-limit: 5
+
+  # ── GitHub Actions workflows ────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3

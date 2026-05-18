@@ -1,0 +1,141 @@
+name: Release Wantastic
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  GO_VERSION: '1.25.10'
+  IMAGE: ghcr.io/wantastic-app/wantastic
+
+jobs:
+  build-binaries:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Resolve version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Build wantastic-core
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist
+          OUT="dist/wantastic-core-${{ steps.version.outputs.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          go build \
+            -trimpath \
+            -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o "${OUT}" \
+            ./cmd/wantastic-core
+          (cd dist && tar -czf "$(basename ${OUT}).tar.gz" "$(basename ${OUT})")
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wantastic-core-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  build-image:
+    name: Build & push Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+
+  release:
+    name: Publish GitHub release
+    needs: [build-binaries, build-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Resolve version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz
+          draft: false
+          prerelease: false
+          body: |
+            # Wantastic ${{ steps.version.outputs.VERSION }}
+
+            ## Container image
+
+            ```
+            docker pull ${{ env.IMAGE }}:${{ steps.version.outputs.VERSION }}
+            ```
+
+            The recommended deployment uses `docker/docker-compose.yml`, which
+            brings up postgres, redis, and wantastic-core in one shot.
+
+            ## Binaries
+
+            Standalone binaries are attached below for `linux/amd64` and
+            `linux/arm64`. For most users the container image is the
+            preferred install path.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

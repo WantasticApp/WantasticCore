@@ -1,0 +1,234 @@
+# Wantastic — Console User Guide
+
+## What is Wantastic?
+
+Wantastic is a private overlay network service.  It lets you connect your
+devices securely and access them from anywhere through a web console.
+
+The console is at **https://console.wantastic.app**.
+
+---
+
+## Getting Started
+
+### 1. Get an account
+
+Wantastic is admin-provisioned — there is no public sign-up. Ask your
+administrator to create an account for you. They'll send you an email
+and an initial password.
+
+1. Open the console URL provided by your administrator.
+2. Log in with the credentials they sent you.
+3. You are taken straight to the dashboard.
+
+### 2. Download the agent
+
+1. In the console, click **Add Device** (top-right of the Devices page).
+2. Select your operating system from the dropdown (Linux, macOS, Windows, iOS, Android).
+3. Click **Download Agent** and run the installer on your device.
+
+### 3. Connect a device
+
+After the agent is installed and running on your device:
+
+1. The agent displays a URL, for example:
+   ```
+   Open this URL to log in: https://console.wantastic.app/activate?user_code=ABCD-1234
+   ```
+2. Open that URL in any browser.
+3. Log in with your account — Google, GitHub, or email/password (whichever you set up).
+4. After you approve, the agent connects automatically.
+5. The device appears in your **Devices** list within a few seconds, shown as
+   **Online** with its assigned private IP address.
+
+The login page is hosted by Auth0 — no separate portal page exists for this step.
+No manual configuration is needed — the device is now part of your private network.
+
+---
+
+## Devices Page
+
+The **Devices** page (`/devices`) is the main view of your network.
+
+Each device card shows:
+
+| Field | Meaning |
+|-------|---------|
+| Name | The hostname of the device (editable — click the pencil icon). |
+| Status | Green dot = online and reachable.  Grey = offline. |
+| Private IP | The IP address other devices use to reach this device. |
+| Last Seen | When the device last checked in. |
+| Platform | The operating system of the device. |
+
+**Actions available on each device:**
+
+- **Rename** — click the pencil icon next to the device name and type a new name.
+- **SSH** — opens a browser terminal directly to the device (Linux only, device must be online).
+- **Open** — opens a browser proxy to an HTTP/HTTPS service on the device (enter the port number when prompted).
+- **WinBox** — opens the MikroTik WinBox interface in the browser (MikroTik devices only).
+- **Remove** — permanently removes the device from your network.  The device goes offline immediately.
+
+---
+
+## Groups Page
+
+Groups (`/groups`) let you organise devices so you can apply access rules to
+many devices at once.
+
+**Create a group:**
+
+1. Click **New Group**.
+2. Enter a name (e.g. "Servers", "Laptops", "IoT").
+3. Click **Save**.
+
+**Add a device to a group:**
+
+1. Open the device from the Devices page.
+2. In the **Groups** section of the device detail panel, click **Add to Group**.
+3. Select the group from the list and click **Confirm**.
+
+A device can belong to multiple groups.
+
+---
+
+## Access Rules Page
+
+Access rules (`/access`) control which devices can connect to each other.
+
+By default, every device in your account can reach every other device.  Use
+rules to restrict that.
+
+**Add a deny rule:**
+
+1. Click **New Rule**.
+2. Under **Source**, select a group (or a single device).
+3. Under **Destination**, select another group (or device).
+4. Set the action to **Deny**.
+5. Click **Save Rule**.
+
+Rules are evaluated top-to-bottom.  The first matching rule wins.  Drag rules
+to reorder them.
+
+**Example — block IoT devices from reaching Servers:**
+
+1. Create a group called "IoT" and a group called "Servers".
+2. Add relevant devices to each group.
+3. Create a Deny rule: Source = IoT → Destination = Servers.
+
+IoT devices can no longer initiate connections to any device in the Servers group.
+
+---
+
+## Web SSH
+
+Web SSH lets you open a terminal to any online Linux device directly in your
+browser — no SSH client, no open ports, no VPN setup beyond Wantastic.
+
+1. Go to **Devices**, find the device you want to access.
+2. Click the **SSH** button.
+3. A terminal window opens in the browser.
+4. Log in with your device credentials as normal.
+
+> The device must be online and have an SSH server running.
+
+---
+
+## Web Proxy
+
+Web Proxy lets you access any HTTP or HTTPS service running on a device
+through a secure browser tunnel.
+
+1. Go to **Devices**, find the device.
+2. Click **Open**.
+3. Enter the port number of the service (e.g. `8080` for a web app, `443` for HTTPS).
+4. Click **Connect**.
+5. The service opens in a new browser tab proxied through the console.
+
+Useful for admin panels, dashboards, or internal tools that are not exposed to
+the internet.
+
+---
+
+## MikroTik / WinBox
+
+If a device is a MikroTik router connected to your network:
+
+1. Go to **Devices** and find the MikroTik router.
+2. Click **WinBox**.
+3. Enter the MikroTik admin username and password when prompted.
+4. The WinBox management interface opens in the browser.
+
+No WinBox desktop application or direct network access to the router is needed.
+
+---
+
+## Account Limits
+
+Each tenant has a per-account device cap (`max_peers`) set by the super-admin.
+There is no public sign-up and no billing — accounts are provisioned by an
+admin who specifies the device limit at creation time.
+
+If you need a higher cap, ask your administrator to raise it.
+
+---
+
+## Notifications
+
+1. Go to **Settings → Notifications**.
+2. Click **Add Notification**.
+3. Choose the event type:
+   - **Device Online** / **Device Offline** — alerts when a device connects or disconnects.
+4. Choose the delivery channel:
+   - **Email** — enters your email address.
+   - **Webhook** — enter a URL; the console will POST a JSON payload to it.
+5. Click **Save**.
+
+To remove a notification, click the trash icon next to it.
+
+---
+
+## Account Settings
+
+Go to **Settings** (top-right avatar menu) to manage your account.
+
+- **Profile** — change your display name or email address, then click **Save**.
+- **Security** — click **Enable 2FA**, scan the QR code with an authenticator
+  app (e.g. Google Authenticator), and enter the 6-digit code to confirm.
+- **Sessions** — lists every active login session with the browser and
+  location.  Click **Revoke** on any session to sign it out remotely.
+- **Danger Zone** — click **Delete Account** to permanently remove your
+  account, all devices, and all data.  This action cannot be undone.
+
+---
+
+## Frequently Asked Questions
+
+**Do I need to open any ports on my firewall?**
+No.  The agent establishes outbound connections only.  No inbound ports need
+to be opened.
+
+**Can I connect devices on different networks?**
+Yes.  Devices on different ISPs, behind NAT, or in different countries all
+appear on the same private network once activated.
+
+**Is traffic encrypted?**
+Yes.  All traffic between devices is end-to-end encrypted.
+Wantastic never sees the content of your traffic.
+
+**What happens if I exceed my device limit?**
+New devices cannot be activated until your administrator raises the cap or
+you remove existing devices.  Already-connected devices continue working normally.
+
+**How do I remove a device permanently?**
+Go to **Devices**, open the device, and click **Remove Device**.  This
+immediately revokes the device's access to the network.
+
+**Can I rename a device?**
+Yes.  Click the pencil icon next to the device name on the Devices page.
+
+---
+
+## Support
+
+- Documentation: https://wantastic.app/docs
+- Email: hello@wantastic.app

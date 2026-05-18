@@ -1,0 +1,16 @@
+# GolangCI-Lint Configuration v2
+# See: https://golangci-lint.run/usage/configuration/
+
+version: "2"
+
+run:
+  timeout: 5m
+  allow-parallel-runners: true
+
+linters:
+  # Use default linters (errcheck, govet, ineffassign, staticcheck, unused)
+  default: standard
+
+issues:
+  # Don't report the same issue more than once
+  max-same-issues: 0

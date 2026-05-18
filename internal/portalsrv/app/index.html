@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="logo/152.png" />
+  <link rel="icon" type="image/png" href="logo/40.png" />
+  <link rel="apple-touch-icon" href="logo/152.png" />
+  <link rel="favicon" href="logo/40.png" />
+  <script>
+    // Unregister any previously installed service worker and clear caches.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((r) => r.unregister());
+      });
+      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+    }
+  </script>
+  <!-- HTML Meta Tags -->
+  <title>Wantastic - Secure Remote Device Management</title>
+  <meta name="description"
+    content="Wantastic provides secure remote access and management for your network devices. Connect via WireGuard VPN, manage MikroTik routers with Winbox, SSH into devices, and monitor network topology - all from your browser." />
+  <meta name="keywords"
+    content="remote device management, WireGuard VPN, MikroTik, Winbox, SSH, network monitoring, topology, ISP management, secure access" />
+  <meta name="author" content="Wantastic" />
+  <meta name="robots" content="index, follow" />
+  <meta name="theme-color" content="#0d1117" />
+
+  <!-- Open Graph Tags -->
+  <meta property="og:url" content="https://portal.wantastic.app" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Wantastic - Secure Remote Device Management" />
+  <meta property="og:description"
+    content="Secure remote access and management for your network devices. Connect via WireGuard VPN, manage routers with Winbox, SSH access, and network topology monitoring." />
+  <meta property="og:image" content="https://portal.wantastic.app/logo/152.png" />
+  <meta property="og:site_name" content="Wantastic" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter Meta Tags -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta property="twitter:domain" content="wantastic.app" />
+  <meta property="twitter:url" content="https://portal.wantastic.app" />
+  <meta name="twitter:title" content="Wantastic - Secure Remote Device Management" />
+  <meta name="twitter:description"
+    content="Secure remote access and management for your network devices. Connect via WireGuard VPN, manage routers with Winbox, SSH access, and network topology monitoring." />
+  <meta name="twitter:image" content="https://portal.wantastic.app/logo/152.png" />
+  <meta name="twitter:creator" content="@wantastic" />
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://portal.wantastic.app" />
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

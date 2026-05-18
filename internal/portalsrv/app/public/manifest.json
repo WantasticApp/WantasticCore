@@ -1,0 +1,21 @@
+{
+    "name": "Wantastic",
+    "short_name": "Wantastic",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0d1117",
+    "theme_color": "#0d1117",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "logo/192.png",
+            "type": "image/png",
+            "sizes": "192x192"
+        },
+        {
+            "src": "logo/512.png",
+            "type": "image/png",
+            "sizes": "512x512"
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+mkdir -p /var/lib/wantastic/redis
+chown -R redis:redis /var/lib/wantastic/redis
+exec su-exec redis redis-server \
+    --bind 127.0.0.1 \
+    --port 6379 \
+    --dir /var/lib/wantastic/redis \
+    --save 60 1 \
+    --appendonly no \
+    --loglevel notice \
+    --protected-mode yes

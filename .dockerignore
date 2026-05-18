@@ -1,0 +1,60 @@
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+README.md
+LICENSE
+
+# CI/CD
+.github/
+
+# Test files
+test/
+*_test.go
+
+# Development files
+config.yaml
+*.mdb/
+tmp/
+
+# Node / Svelte build artifacts (we copy app/dist explicitly in the
+# multi-stage build; everything else under app/ is dev-only).
+internal/portalsrv/app/node_modules/
+internal/portalsrv/app/.svelte-kit/
+internal/portalsrv/app/.vite-cache/
+
+# Docker
+Dockerfile*
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,30 @@
+#!/usr/bin/with-contenv bash
+# nginx terminates TLS for the portal. The setup wizard writes
+# /etc/nginx/conf.d/site.conf and (after LE issues) reloads. Until then
+# we serve a bootstrap config that hands :443 over to wantastic-core's
+# self-signed wizard on :8443.
+
+set -euo pipefail
+
+mkdir -p /etc/nginx/ssl /var/log/nginx /var/lib/wantastic/logs/nginx
+
+# Generate a bootstrap self-signed cert on first boot (used by the
+# bootstrap server block until LE issues for the real domain).
+if [ ! -s /etc/nginx/ssl/bootstrap.crt ]; then
+    openssl req -x509 -nodes -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/bootstrap.key \
+        -out    /etc/nginx/ssl/bootstrap.crt \
+        -days 825 \
+        -subj "/CN=wantastic-bootstrap" >/dev/null 2>&1
+    chmod 600 /etc/nginx/ssl/bootstrap.key
+fi
+
+# Install bootstrap config if no site config exists yet.
+if [ ! -f /etc/nginx/conf.d/site.conf ]; then
+    cp /etc/nginx/templates/site.bootstrap.conf /etc/nginx/conf.d/site.conf
+fi
+
+# Pipe nginx logs into the persisted volume.
+ln -sfn /var/lib/wantastic/logs/nginx /var/log/nginx
+
+exec nginx -g 'daemon off;'

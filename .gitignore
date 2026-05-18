@@ -1,0 +1,116 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+.npm-*/
+# Test binaries
+*.test
+node_modules/
+# Go workspace file
+go.work
+data/
+# Dependency directories
+vendor/
+terraform/dev/.terraform/
+*.fstate.*
+node.db/
+cmd/web/portal/app/pkg/
+# Go build cache
+.terraform/
+**/.terraform/
+.agent/
+.terraform*
+.cache/
+.gocache/
+tenants/
+*.tfvars
+# IDE files
+*.prod.*
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+backups/
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+data/
+.claude/
+# Database files
+*.mdb/
+*.lmdb
+*.db
+production.yaml
+# Secrets and sensitive files
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+config/secrets.yaml
+.env
+.env.local
+
+# Svelte build artifacts
+cmd/web/tenant-svelte/build/
+cmd/web/tenant-svelte/node_modules/
+cmd/web/tenant/templates/static/
+tmp/air-svelte/
+.env.*.local
+
+# WireGuard configuration files
+*.conf
+!nginx.conf
+!nginx-*.conf
+wg*.conf
+private.key
+public.key
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# Coverage files
+coverage.out
+*.cover
+terraform/dev/terraform.tfstate.backup
+terraform/dev/terraform.tfstate
+terraform/dev/.terraform.*
+dist/
+.pnpm-store/
+.agent/
+# Terraform sensitive files
+terraform/prod/terraform.tfstate
+terraform/prod/terraform.tfstate.backup
+terraform/prod/tfplan
+terraform/prod/id_rsa
+terraform/prod/id_rsa.pub
+terraform/prod/id_ed25519
+terraform/prod/id_ed25519.pub
+terraform/prod/ssl.plan
+terraform/prod/*.tfvars
+!terraform/prod/terraform.tfvars.example
+
+# Compiled binaries
+dist/
+wantastic-*
+*.tar.gz
+terraform/dev/init.sql
+terraform/linode/init.sql
+.pnpm-store/v10/projects/e3f745d4cc164d552b79ee5167743ba6
+test.br
+terraform/dev/adminbot-data/*
+modelgen
+terraform/config.yaml
+config.yaml
