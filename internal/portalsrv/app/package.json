@@ -43,7 +43,7 @@
     "vitest": "^4.1.6"
   },
   "dependencies": {
-    "@neodrag/svelte": "^1.2.4",
+    "@neodrag/svelte": "^2.3.3",
     "@stripe/stripe-js": "^4.0.0",
     "@types/qrcode": "^1.5.6",
     "@xterm/addon-fit": "^0.11.0",
