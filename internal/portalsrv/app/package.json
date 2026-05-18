@@ -18,7 +18,7 @@
     "@iconify-json/material-symbols-light": "^1.2.55",
     "@sveltejs/vite-plugin-svelte": "^2.5.3",
     "@testing-library/svelte": "^5.3.1",
-    "@tsconfig/svelte": "^4.0.1",
+    "@tsconfig/svelte": "^5.0.8",
     "@types/d3": "^7.4.3",
     "@types/node": "^20.12.11",
     "@xterm/addon-web-links": "^0.12.0",
