@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { draggable } from "@neodrag/svelte";
-  import { scale } from "svelte/transition";
+  import { scale, fly } from "svelte/transition";
   import Titlebar from "$components/shared/Titlebar.svelte";
   import {
     appZIndexes,
@@ -49,6 +49,7 @@
   let loading = false;
   let error: string | null = null;
   let status: CopilotStatus | null = null;
+  let statusLoaded = false; // Distinguishes "not loaded yet" from "loaded as null"
   let savingKey = false;
   let draft = "";
   let apiKeyInput = "";
@@ -57,6 +58,9 @@
   let showSettings = false;
   let scrollEl: HTMLDivElement | null = null;
   let textareaEl: HTMLTextAreaElement | null = null;
+
+  // On mobile, sidebar starts collapsed so the chat area gets the full width.
+  $: if ($isMobile && sidebarOpen === undefined) sidebarOpen = false;
 
   const unsub = [
     copilotStore.sessions.subscribe((v) => (sessions = v)),
@@ -69,6 +73,7 @@
   ];
 
   onMount(() => {
+    if ($isMobile) sidebarOpen = false;
     init();
     return () => unsub.forEach((u) => u());
   });
@@ -76,6 +81,7 @@
   async function init() {
     try {
       const s = await copilotStore.getStatus();
+      statusLoaded = true;
       if (s.configured) {
         const existing = await copilotStore.listSessions();
         if (existing.length === 0) {
@@ -85,7 +91,7 @@
         }
       }
     } catch {
-      /* error already in store */
+      statusLoaded = true;
     }
   }
 
@@ -96,7 +102,6 @@
       await copilotStore.setApiKey(trimmed);
       apiKeyInput = "";
       showSettings = false;
-      // Start a session as soon as the key is accepted.
       const existing = await copilotStore.listSessions();
       if (existing.length === 0) {
         await copilotStore.openSession();
@@ -113,6 +118,7 @@
     try {
       await copilotStore.openSession();
       await tick();
+      if ($isMobile) sidebarOpen = false;
       textareaEl?.focus();
     } catch {
       /* handled in store */
@@ -125,6 +131,7 @@
     } else {
       copilotStore.selectSession(s.session_id);
     }
+    if ($isMobile) sidebarOpen = false;
   }
 
   async function closeChat(s: CopilotSession, ev: MouseEvent) {
@@ -154,7 +161,6 @@
     }
   }
 
-  // Auto-grow the textarea up to ~8 rows, ChatGPT-style.
   function autoSize() {
     if (!textareaEl) return;
     textareaEl.style.height = "auto";
@@ -185,14 +191,30 @@
     });
   }
 
-  // Each quick prompt carries a small inline SVG name (resolved below) so the
-  // welcome screen reads as a tools palette rather than an emoji rebus.
+  function openSettings() {
+    showSettings = true;
+    apiKeyInput = "";
+  }
+
   const QUICK_PROMPTS = [
     { icon: "list",     title: "List my devices",     text: "List my devices and their online status." },
     { icon: "signal",   title: "Ping a device",        text: "Ping the device named " },
     { icon: "activity", title: "Show recent traffic",  text: "Show recent traffic for my busiest device over the last hour." },
     { icon: "wrench",   title: "Diagnose an issue",    text: "One of my devices keeps disconnecting. Walk me through diagnosing it." },
   ];
+
+  // Compute which top-level screen renders. Centralizing this avoids
+  // the "fell through every {:else if} and now we're staring at a
+  // useless 'Open a chat to start' label" failure mode.
+  $: screen = !statusLoaded
+    ? "loading"
+    : !status?.configured
+      ? "configure"
+      : showSettings && status?.can_configure
+        ? "settings"
+        : active
+          ? "chat"
+          : "empty";
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -221,9 +243,12 @@
     on:close={handleClose}
   />
 
-  <div class="copilot" class:sidebar-hidden={!sidebarOpen}>
+  <div class="copilot" class:sidebar-hidden={!sidebarOpen} class:mobile={$isMobile}>
     {#if sidebarOpen}
-      <aside class="sidebar">
+      <aside
+        class="sidebar"
+        transition:fly|local={{ x: $isMobile ? -240 : 0, duration: 180 }}
+      >
         <div class="sidebar-top">
           <button
             class="icon-btn"
@@ -249,46 +274,53 @@
           </button>
         </div>
 
-        <ul class="session-list">
-          {#each sessions as s (s.session_id)}
-            <li
-              class="session-item"
-              class:active={active?.session_id === s.session_id}
-              on:click={() => pickChat(s)}
-              on:keydown={(e) => e.key === "Enter" && pickChat(s)}
-              role="button"
-              tabindex="0"
-            >
-              <div class="session-icon" aria-hidden="true">
-                {#if s.role === "admin"}
+        {#if sessions.length === 0}
+          <div class="sidebar-empty">
+            <p>No chats yet</p>
+            <span>Click <strong>New chat</strong> above to start.</span>
+          </div>
+        {:else}
+          <ul class="session-list">
+            {#each sessions as s (s.session_id)}
+              <li
+                class="session-item"
+                class:active={active?.session_id === s.session_id}
+                on:click={() => pickChat(s)}
+                on:keydown={(e) => e.key === "Enter" && pickChat(s)}
+                role="button"
+                tabindex="0"
+              >
+                <div class="session-icon" aria-hidden="true">
+                  {#if s.role === "admin"}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                  {:else}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                    </svg>
+                  {/if}
+                </div>
+                <div class="session-info">
+                  <span class="session-title">{preview(s)}</span>
+                  <span class="session-meta">{relTime(s.last_active)}</span>
+                </div>
+                <button class="close-x" on:click={(e) => closeChat(s, e)} aria-label="Delete chat" title="Delete chat">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                   </svg>
-                {:else}
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                  </svg>
-                {/if}
-              </div>
-              <div class="session-info">
-                <span class="session-title">{preview(s)}</span>
-                <span class="session-meta">{relTime(s.last_active)}</span>
-              </div>
-              <button class="close-x" on:click={(e) => closeChat(s, e)} aria-label="Delete chat" title="Delete chat">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                </svg>
-              </button>
-            </li>
-          {/each}
-        </ul>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
 
         <div class="sidebar-footer">
-          {#if status?.is_admin && status?.configured}
+          {#if status?.is_admin}
             <button
               class="settings-btn"
-              on:click={() => (showSettings = true)}
+              on:click={openSettings}
               title="Copilot settings"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -300,24 +332,71 @@
           {/if}
         </div>
       </aside>
+
+      {#if $isMobile}
+        <!-- Mobile: tap-anywhere backdrop closes the slide-over sidebar. -->
+        <button
+          class="mobile-scrim"
+          on:click={() => (sidebarOpen = false)}
+          aria-label="Close sidebar"
+        ></button>
+      {/if}
     {/if}
 
-    <main class="chat" class:offset-toggle={!sidebarOpen}>
-      {#if !sidebarOpen}
-        <button
-          class="floating-toggle"
-          on:click={() => (sidebarOpen = true)}
-          aria-label="Open sidebar"
-          title="Open sidebar"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </button>
-      {/if}
+    <main class="chat">
+      <!-- Chat header — always visible. Houses the sidebar toggle (when closed)
+           and the Settings cog. Admins reach the API-key form from here even
+           when no chat is open and the sidebar is hidden. -->
+      <header class="chat-header">
+        <div class="chat-header-left">
+          {#if !sidebarOpen}
+            <button
+              class="icon-btn"
+              on:click={() => (sidebarOpen = true)}
+              aria-label="Open sidebar"
+              title="Open sidebar"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            </button>
+          {/if}
+          <span class="chat-title">
+            {#if screen === "configure"}
+              Welcome
+            {:else if screen === "settings"}
+              Settings
+            {:else if active}
+              {preview(active)}
+            {:else}
+              Copilot
+            {/if}
+          </span>
+        </div>
+        <div class="chat-header-right">
+          {#if status?.is_admin && status?.can_configure}
+            <button
+              class="icon-btn"
+              on:click={openSettings}
+              aria-label="Settings"
+              title="Settings"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+              </svg>
+            </button>
+          {/if}
+        </div>
+      </header>
 
-      {#if status && !status.configured}
+      {#if screen === "loading"}
+        <div class="full-state">
+          <div class="loading-spinner" aria-hidden="true"></div>
+          <p>Connecting to Copilot…</p>
+        </div>
+      {:else if screen === "configure"}
         <!-- Configure Copilot screen — replaces the chat when no API key is set. -->
         <div class="configure-screen">
           <div class="configure-card">
@@ -337,7 +416,7 @@
               </p>
             </div>
 
-            {#if status.can_configure}
+            {#if status?.can_configure}
               <div class="configure-form">
                 <label for="api-key">
                   Anthropic API key
@@ -419,7 +498,7 @@
             {/if}
           </div>
         </div>
-      {:else if showSettings && status?.can_configure}
+      {:else if screen === "settings"}
         <div class="configure-screen">
           <div class="configure-card">
             <div class="configure-hero">
@@ -492,11 +571,32 @@
             </div>
           </div>
         </div>
-      {:else if !active}
-        <div class="empty">
-          <p>{loading ? "Loading…" : "Open a chat to start."}</p>
+      {:else if screen === "empty"}
+        <div class="full-state">
+          <div class="empty-icon" aria-hidden="true">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+              <path d="M9 11a4 4 0 118 0v3a4 4 0 11-8 0v-3z" />
+              <path d="M5 11a4 4 0 014-4" />
+              <path d="M3 19h6" />
+            </svg>
+          </div>
+          <p class="empty-title">Ready when you are</p>
+          <p class="empty-sub">{loading ? "Loading sessions…" : "Start a new conversation."}</p>
+          <button
+            class="primary-btn empty-cta"
+            on:click={newChat}
+            disabled={!status?.configured}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            New chat
+          </button>
+          {#if error && !error.startsWith("copilot_disabled:")}
+            <div class="error" style="margin-top: 16px; max-width: 420px;">{error}</div>
+          {/if}
         </div>
-      {:else}
+      {:else if active}
         <div class="scroller" bind:this={scrollEl}>
           {#if (active.history ?? []).length === 0}
             <div class="welcome">
@@ -665,11 +765,32 @@
     font-family:
       -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
       Inter, Roboto, sans-serif;
+    position: relative;
   }
-  /* When hidden, the sidebar is unmounted from the DOM (see {#if sidebarOpen})
-     so we drop the first column entirely — no rail, no overflow. */
   .copilot.sidebar-hidden {
     grid-template-columns: 1fr;
+  }
+  /* Mobile: sidebar floats above the chat as a slide-over so neither
+     panel feels cramped on a narrow viewport. */
+  .copilot.mobile {
+    grid-template-columns: 1fr;
+  }
+  .copilot.mobile .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 80vw);
+    z-index: 20;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+  }
+  .mobile-scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    border: none;
+    z-index: 15;
+    cursor: pointer;
   }
 
   /* ───────── Sidebar ───────── */
@@ -730,6 +851,26 @@
   .new-chat:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .sidebar-empty {
+    padding: 24px 16px;
+    text-align: center;
+    color: rgba(230, 232, 240, 0.55);
+    font-size: 13px;
+    line-height: 1.6;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .sidebar-empty p {
+    margin: 0 0 4px;
+    font-weight: 500;
+    color: rgba(230, 232, 240, 0.85);
+  }
+  .sidebar-empty span {
+    font-size: 12px;
   }
 
   .session-list {
@@ -825,36 +966,40 @@
     border-color: rgba(255, 255, 255, 0.15);
   }
 
+  /* ───────── Chat header ───────── */
+  .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.015);
+    min-height: 48px;
+  }
+  .chat-header-left,
+  .chat-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .chat-title {
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* ───────── Chat ───────── */
   .chat {
     display: grid;
-    grid-template-rows: 1fr auto;
+    grid-template-rows: auto 1fr auto;
     min-height: 0;
     background: #0f1117;
     position: relative;
-  }
-  .floating-toggle {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    width: 32px;
-    height: 32px;
-    display: grid;
-    place-items: center;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: inherit;
-    border-radius: 6px;
-    cursor: pointer;
-    z-index: 5;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .floating-toggle:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-  .chat.offset-toggle .scroller {
-    padding-top: 52px;
   }
 
   .scroller {
@@ -862,12 +1007,47 @@
     padding: 24px 32px 8px;
     scroll-behavior: smooth;
   }
-  .empty {
-    display: grid;
-    place-items: center;
-    height: 100%;
-    opacity: 0.55;
-    font-size: 14px;
+
+  .full-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 32px 24px;
+    text-align: center;
+    color: rgba(230, 232, 240, 0.7);
+    grid-row: 2 / 3;
+  }
+  .empty-icon {
+    color: #b39dff;
+    margin-bottom: 8px;
+  }
+  .empty-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #e6e8f0;
+  }
+  .empty-sub {
+    margin: 0 0 12px;
+    font-size: 13px;
+    opacity: 0.7;
+  }
+  .empty-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .loading-spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid rgba(124, 106, 247, 0.15);
+    border-top-color: #7c6af7;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 8px;
   }
 
   /* Welcome / quick prompts */
@@ -1082,10 +1262,9 @@
   .configure-screen {
     display: grid;
     place-items: center;
-    height: 100%;
     overflow-y: auto;
-    padding: 40px 24px;
-    grid-row: 1 / -1;
+    padding: 32px 24px;
+    grid-row: 2 / 3;
   }
   .configure-card {
     width: 100%;
@@ -1247,5 +1426,27 @@
   }
   .non-admin-notice p {
     margin: 0;
+  }
+
+  /* ───────── Mobile overrides ───────── */
+  @media (max-width: 720px) {
+    .composer-wrap {
+      padding: 8px 12px 12px;
+    }
+    .scroller {
+      padding: 16px 14px 8px;
+    }
+    .quick-prompts {
+      grid-template-columns: 1fr;
+    }
+    .welcome {
+      margin: 16px auto;
+    }
+    .welcome-title h3 {
+      font-size: 18px;
+    }
+    .configure-card {
+      padding: 20px 18px 18px;
+    }
   }
 </style>

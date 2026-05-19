@@ -938,4 +938,46 @@
     outline: none;
     border-color: rgba(124, 106, 247, 0.6);
   }
+
+  /* ─── Mobile overrides ───────────────────────────────────────────────
+     The window already maximizes on $isMobile, but the inner layout was
+     authored for a desktop 960×640 frame. On narrow viewports the form
+     row's `1fr 1fr` grid and the right-aligned action row both push
+     content past the viewport edge ("Create te…", "and devic…" clips
+     in the user's screenshot). These breakpoints reflow it cleanly. */
+  @media (max-width: 720px) {
+    .content {
+      padding: 12px 14px;
+    }
+    .toolbar {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .toolbar .search {
+      flex: 1 1 100%;
+    }
+    .tabs {
+      padding: 0 8px;
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 12px 10px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+    .create-form {
+      max-width: 100%;
+    }
+    .form-actions {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .form-actions button {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+  }
 </style>
