@@ -63,6 +63,26 @@ PostgreSQL, Redis, nginx with auto Let's Encrypt, and an iptables firewall
 - **Auto-renewing TLS** — certbot wakes every 12h and rolls the cert through the LE webroot, then reloads nginx.
 - **Default-deny firewall** — iptables ruleset baked into the image; toggle from the setup form.
 
+## Guides
+
+Short, narration-free walkthroughs of the two flows users hit most often.
+GitHub renders the MP4s inline below; raw copies live in
+[`docs/guide/`](docs/guide).
+
+<details open>
+<summary><b>Add a peer with the native WireGuard client</b> — generate a config, scan the QR, ship.</summary>
+
+https://github.com/WantasticApp/WantasticCore/raw/main/docs/guide/add-with-native-wg-client.mp4
+
+</details>
+
+<details>
+<summary><b>WUSP in action</b> — live device push, port scan, browser SSH over the overlay.</summary>
+
+https://github.com/WantasticApp/WantasticCore/raw/main/docs/guide/wusp.mp4
+
+</details>
+
 ## One-command install
 
 Fresh Ubuntu / Debian / Rocky / Alma VM with root access:
