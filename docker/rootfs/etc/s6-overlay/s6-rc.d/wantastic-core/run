@@ -1,0 +1,36 @@
+#!/usr/bin/with-contenv bash
+# wantastic-core picks up its config from /var/lib/wantastic/config/config.yaml.
+# That path is on the persisted volume so the wizard's output survives a
+# container recreation. (Earlier images pointed at /etc/wantastic/config.yaml
+# which is in the ephemeral container layer — fine for the first run, but the
+# config vanished any time the container was rebuilt and the operator was
+# kicked back into the wizard.)
+# On first boot the file doesn't exist; the binary detects WANTASTIC_WEB_SETUP=1
+# and starts the web wizard on :8443 instead. Once the wizard writes the
+# config, the binary exits and s6 restarts us into the real service.
+
+set -euo pipefail
+
+# Wait for postgres + redis to be reachable. s6's dependency graph already
+# ordered us after them, but the dependencies fire on "process started",
+# not "ready to serve connections", so we still need a small wait.
+for i in $(seq 1 30); do
+    if pg_isready -h 127.0.0.1 -p 5432 -q && \
+       redis-cli -h 127.0.0.1 -p 6379 ping >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+# Wire the generated postgres password into env if the wizard hasn't been
+# run yet — the binary picks it up from WANTASTIC_DB_PASSWORD on first boot.
+if [ -s /var/lib/wantastic/config/db.password ] && [ -z "${WANTASTIC_DB_PASSWORD:-}" ]; then
+    export WANTASTIC_DB_PASSWORD="$(cat /var/lib/wantastic/config/db.password)"
+fi
+export WANTASTIC_DB_HOST=127.0.0.1
+export WANTASTIC_DB_PORT=5432
+export WANTASTIC_DB_USER=wantastic
+export WANTASTIC_DB_NAME=wantastic
+export WANTASTIC_REDIS_ADDR=127.0.0.1:6379
+
+exec /usr/local/bin/wantastic-core --config /var/lib/wantastic/config/config.yaml

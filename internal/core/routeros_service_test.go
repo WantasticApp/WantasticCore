@@ -163,22 +163,22 @@ func TestRouterOSPeerFlagsApiVerificationOverridesFingerprint(t *testing.T) {
 	}
 }
 
-// No fingerprint yet + Winbox port detected → keep the affordance on.
-// The port-scan-then-fingerprint pipeline has a brief window where
-// the operator should still see the dashboard button.
-func TestRouterOSPeerFlagsPendingFingerprintKeepsCandidate(t *testing.T) {
+// No fingerprint yet + Winbox port detected → button stays off. Port-only
+// evidence isn't enough to claim RouterOS; we wait for either a positive
+// fingerprint or a successful API verification.
+func TestRouterOSPeerFlagsPortOnlyEvidenceIsNotEnough(t *testing.T) {
 	t.Parallel()
 
 	candidate, ready, _, _ := routerOSPeerFlags(
 		&server.PeerMetadata{HasWinbox: true, ScannedWinboxPort: 8291},
 		nil,
-		[]*pb.OpenPort{{Port: 8291}},
+		[]*pb.OpenPort{{Port: 8291}, {Port: 8728}, {Port: 8729}},
 	)
 
-	if !candidate {
-		t.Fatal("expected candidate=true when fingerprint hasn't landed yet but Winbox port is open")
+	if candidate {
+		t.Fatal("port 8291/8728/8729 alone must not light the RouterOS button without fingerprint or API verification")
 	}
 	if ready {
-		t.Fatal("expected ready=false without API verification")
+		t.Fatal("ready must remain false without API verification")
 	}
 }

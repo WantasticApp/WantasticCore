@@ -1381,84 +1381,52 @@ func routerOSShouldReconnectSession(err error) bool {
 }
 
 // routerOSPeerFlags decides whether a peer should expose the RouterOS
-// dashboard / API controls in the UI. The function answers four
-// questions in priority order:
+// dashboard / API controls in the UI. The button only lights up on
+// explicit positive evidence — never on port-level guesses:
 //
-//  1. ready/port/useTLS — has the RouterOS API actually been verified on
-//     this peer? If so, the dashboard is unambiguously safe to show.
+//  1. **Verified API.** If we've actually spoken the RouterOS API to
+//     this peer, the device is unambiguously RouterOS. Return that
+//     port/TLS info so the dashboard can connect directly.
 //
-//  2. candidate — should the "RouterOS Dashboard" affordance be offered
-//     at all? Fingerprinting is authoritative here: if we have a
-//     confident OS fingerprint that says the device is something else
-//     (Windows, Linux, macOS, Cisco IOS, …), we suppress the button
-//     even if port 8291 is open — that port is frequently exposed by
-//     consumer NAT routers, port-forward setups, or unrelated services
-//     and previously produced false positives.
+//  2. **Positive fingerprint.** A scan that identified the device as
+//     MikroTik / RouterBOARD / OS-family "routeros" (typically via the
+//     IEEE OUI database on the MAC address) lights up the button.
 //
-// A peer with no fingerprint yet but Winbox/RouterOS-API ports detected
-// still qualifies — the port-scan-then-fingerprint pipeline has a brief
-// window where the operator should still see the button. Once the
-// fingerprint lands and disagrees, the button drops.
+//  Everything else returns candidate=false, even if Winbox port 8291
+//  is open. That port is frequently exposed by consumer NAT routers,
+//  unrelated services, and accidental port-forwards; surfacing the
+//  RouterOS dashboard there is misleading and was the source of the
+//  reported false positives.
+//
+// Side effect: a brand-new MikroTik peer doesn't get the button until
+// the next port scan finishes. That's a deliberate trade — a few seconds
+// of "missing button" beats a wrong "RouterOS Dashboard" affordance on
+// every Windows laptop with 8291 open.
 func routerOSPeerFlags(peer *server.PeerMetadata, fingerprint *pb.OSFingerprint, ports []*pb.OpenPort) (candidate bool, ready bool, port int32, useTLS bool) {
 	if peer == nil {
 		return false, false, 0, false
 	}
 
-	// Determine API readiness first — verified API trumps fingerprint.
+	// 1. Verified API — strongest signal. We *talked* to RouterOS here.
 	if peer.RouterOSAPIVerified {
-		ready = true
-		port = int32(peer.RouterOSAPIPort)
-		useTLS = peer.RouterOSAPITLS
-	} else {
-		for _, session := range peer.WinboxSessions {
-			if session.Enabled && session.RouterOSAPIVerified {
-				ready = true
-				port = int32(session.RouterOSAPIPort)
-				useTLS = session.RouterOSAPITLS
-				break
-			}
+		return true, true, int32(peer.RouterOSAPIPort), peer.RouterOSAPITLS
+	}
+	for _, session := range peer.WinboxSessions {
+		if session.Enabled && session.RouterOSAPIVerified {
+			return true, true, int32(session.RouterOSAPIPort), session.RouterOSAPITLS
 		}
 	}
 
-	// Verified API → confirmed candidate, no further gating needed.
-	if ready {
-		return true, ready, port, useTLS
-	}
-
-	// Strong positive fingerprint: MikroTik / RouterBOARD / routeros family.
-	fpPositive := false
-	fpExplicitOther := false
+	// 2. Positive fingerprint — MikroTik / RouterBOARD / routeros family.
 	if fingerprint != nil {
 		if strings.EqualFold(fingerprint.Vendor, "MikroTik") ||
 			strings.EqualFold(fingerprint.Vendor, "RouterBOARD") ||
 			strings.EqualFold(fingerprint.OsFamily, "routeros") {
-			fpPositive = true
-		} else if fingerprint.Vendor != "" || fingerprint.OsFamily != "" {
-			// We have a fingerprint and it says something other than
-			// MikroTik. Trust it and hide the RouterOS affordance.
-			fpExplicitOther = true
+			return true, false, 0, false
 		}
 	}
 
-	if fpPositive {
-		return true, ready, port, useTLS
-	}
-	if fpExplicitOther {
-		return false, ready, port, useTLS
-	}
-
-	// No fingerprint yet — fall back to port-level signals so newly
-	// added peers still surface the button until the scan completes.
-	if peer.HasWinbox || peer.ScannedWinboxPort > 0 || len(peer.WinboxSessions) > 0 {
-		candidate = true
-	}
-	for _, p := range ports {
-		if p == nil {
-			continue
-		}
-		if p.Port == 8291 || p.Port == 8728 || p.Port == 8729 {
-			candidate = true
-		}
-	}
-	return candidate, ready, port, useTLS
+	// No positive evidence: hide the button, even if 8291 is open.
+	_ = ports
+	return false, false, 0, false
 }

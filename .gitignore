@@ -104,7 +104,12 @@ terraform/prod/*.tfvars
 
 # Compiled binaries
 dist/
-wantastic-*
+# Match only top-level build artifacts (e.g. `wantastic-core`, `wantastic-core-arm64`)
+# — NOT package directories like `cmd/wantastic-core/` which the leading `/`
+# would have spared in the first place. Without the anchor, `wantastic-*`
+# walked the tree and silently excluded the binary's own source from the
+# repo, breaking CI (`stat .../cmd/wantastic-core: directory not found`).
+/wantastic-*
 *.tar.gz
 terraform/dev/init.sql
 terraform/linode/init.sql

@@ -16,8 +16,40 @@
 #     wantastic:latest
 #   # Open https://<host>/  (self-signed cert until LE issues for your domain)
 
-# ───────── Stage 1: build wantastic-core ─────────
-FROM golang:alpine AS builder
+# ───────── Stage 1a: build the SPA (portal frontend) ─────────
+# The Go binary embeds internal/portalsrv/app/dist/* via //go:embed. The
+# dist tree is gitignored (it's a build artifact), so CI checkouts don't
+# have it — we have to produce it here before `go build` runs.
+#
+# --platform=$BUILDPLATFORM pins this stage to the runner's native arch
+# regardless of what we're targeting downstream. The SPA output is
+# pure JS/CSS/HTML — platform-independent — so building it twice (once
+# per target) under QEMU emulation would waste ~9 min per multi-arch run.
+#
+# Copying the whole app/ directory in one shot (instead of staging the
+# lockfile separately) is required because the package ships a
+# pnpm-workspace.yaml that uses pnpm 10's onlyBuiltDependencies setting;
+# pnpm errors with "packages field missing or empty" if it sees that
+# file without the rest of the project alongside it.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS spa
+WORKDIR /src
+# Match the local toolchain: the app's pnpm-workspace.yaml uses
+# onlyBuiltDependencies (a pnpm 10 feature). pnpm 9 chokes on that file
+# with "packages field missing or empty".
+RUN corepack enable && corepack prepare pnpm@10.29.3 --activate
+COPY internal/portalsrv/app/ ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile && pnpm build
+
+# ───────── Stage 1b: build wantastic-core ─────────
+# Same trick — run the compiler on the BUILDPLATFORM and cross-compile
+# to TARGETPLATFORM via GOARCH/GOOS. CGO_ENABLED=0 means we don't need
+# the target's libc, so cross-compilation is free. This replaces a
+# QEMU-emulated `go build` (15–30 min for arm64 on an x86 runner) with
+# a native one (≈2 min).
+FROM --platform=$BUILDPLATFORM golang:alpine AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -25,9 +57,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 COPY . .
-ENV CGO_ENABLED=0 GOOS=linux
+# Drop in the freshly-built SPA so the //go:embed directive has files to read.
+COPY --from=spa /src/dist/ ./internal/portalsrv/app/dist/
+ENV CGO_ENABLED=0
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags='-s -w' -o /out/wantastic-core ./cmd/wantastic-core
 
 # ───────── Stage 2: runtime ─────────

@@ -7,7 +7,13 @@ on:
 
 env:
   GO_VERSION: '1.25.10'
-  IMAGE: ghcr.io/wantastic-app/wantastic
+  # Opt into Node.js 24 for the JavaScript-based actions themselves
+  # (checkout, setup-go, setup-node, upload-artifact, pnpm/action-setup).
+  # GitHub removes Node.js 20 from runners on 2026-09-16; this env makes
+  # the deprecation warning go away today and is forward-compatible.
+  # This does NOT affect the project's own Node version — that's still
+  # pinned via actions/setup-node@v4 with node-version: '20'.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   build-binaries:
@@ -30,6 +36,30 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      # The portal binary embeds the SPA via //go:embed app/dist/*, so the
+      # dist tree must exist on disk before `go build`. pnpm + Node here
+      # produce it; without this step `go build` fails with
+      # "pattern app/dist/*: no matching files found".
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Match the local toolchain: app/pnpm-workspace.yaml uses
+          # onlyBuiltDependencies (pnpm 10), and pnpm 9 errors with
+          # "packages field missing or empty" trying to parse it.
+          version: 10.29.3
+          run_install: false
+
+      - name: Build SPA (portal frontend)
+        working-directory: internal/portalsrv/app
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
 
       - name: Resolve version
         id: version
@@ -63,6 +93,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,6 +102,16 @@ jobs:
       - name: Resolve version
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      # Derive the GHCR image path from the actual repo owner so this
+      # workflow keeps working in forks (and doesn't depend on a hardcoded
+      # "wantastic-app" namespace that may not exist for the runner's token).
+      # GHCR requires the owner segment to be lowercase.
+      - name: Resolve image name
+        id: image
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${owner}/wantastic" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -92,8 +134,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE }}:${{ steps.version.outputs.VERSION }}
-            ${{ env.IMAGE }}:latest
+            ${{ steps.image.outputs.image }}:${{ steps.version.outputs.VERSION }}
+            ${{ steps.image.outputs.image }}:latest
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
 
@@ -111,6 +153,12 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          # Match only the binary tarballs uploaded by build-binaries.
+          # docker/build-push-action@v6 also drops a `*.dockerbuild`
+          # build-summary artifact in the same run; without this filter
+          # download-artifact tries to merge it alongside the tarballs
+          # and the whole step fails with "Artifact download failed".
+          pattern: wantastic-core-*
           path: dist
           merge-multiple: true
 
@@ -126,7 +174,7 @@ jobs:
             ## Container image
 
             ```
-            docker pull ${{ env.IMAGE }}:${{ steps.version.outputs.VERSION }}
+            docker pull ${{ needs.build-image.outputs.image }}:${{ steps.version.outputs.VERSION }}
             ```
 
             The recommended deployment uses `docker/docker-compose.yml`, which
