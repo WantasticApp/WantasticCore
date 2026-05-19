@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WUSP: Wantastic USP over WireGuard</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 18mm 22mm 18mm;
+    }
+    :root {
+      --ink: #111111;
+      --muted: #5a5f66;
+      --line: #d8dde3;
+      --accent: #0e3a66;
+      --panel: #f5f7f9;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: var(--ink);
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+      line-height: 1.42;
+      font-size: 11.5pt;
+    }
+    main {
+      max-width: 176mm;
+      margin: 0 auto;
+    }
+    .cover {
+      min-height: 248mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 8mm 0 10mm 0;
+      page-break-after: always;
+    }
+    .eyebrow {
+      font-size: 9pt;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: var(--muted);
+    }
+    h1 {
+      margin: 12mm 0 4mm 0;
+      font-size: 30pt;
+      line-height: 1.02;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--accent);
+    }
+    .subtitle {
+      font-size: 15pt;
+      line-height: 1.28;
+      max-width: 130mm;
+      color: #1a1d21;
+      margin-bottom: 10mm;
+    }
+    .cover-abstract {
+      max-width: 138mm;
+      font-size: 12pt;
+      line-height: 1.5;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: 24mm 1fr;
+      gap: 2mm 6mm;
+      max-width: 120mm;
+      font-size: 10pt;
+      color: #20242a;
+    }
+    .meta dt {
+      color: var(--muted);
+    }
+    .rule {
+      border-top: 1px solid var(--line);
+      margin: 6mm 0;
+    }
+    h2 {
+      margin: 0 0 3mm 0;
+      font-size: 16pt;
+      line-height: 1.14;
+      font-weight: 600;
+      color: var(--accent);
+      page-break-after: avoid;
+    }
+    h3 {
+      margin: 7mm 0 2mm 0;
+      font-size: 12pt;
+      font-weight: 600;
+      color: #20242a;
+      page-break-after: avoid;
+    }
+    p {
+      margin: 0 0 3.4mm 0;
+      text-align: justify;
+      hyphens: auto;
+    }
+    ul, ol {
+      margin: 0 0 4mm 5mm;
+      padding-left: 5mm;
+    }
+    li {
+      margin: 0 0 1.6mm 0;
+    }
+    .lead {
+      font-size: 12.4pt;
+      line-height: 1.5;
+    }
+    .callout {
+      margin: 4mm 0 5mm 0;
+      padding: 4mm 5mm;
+      background: var(--panel);
+      border-left: 2.5mm solid var(--accent);
+      font-size: 11pt;
+    }
+    .mono {
+      font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 9.2pt;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      background: #fbfcfd;
+      border: 1px solid var(--line);
+      padding: 4mm;
+      margin: 3mm 0 4mm 0;
+      break-inside: avoid;
+    }
+    .compact p {
+      margin-bottom: 2.6mm;
+    }
+    .refs li {
+      margin-bottom: 2.2mm;
+    }
+    .small {
+      font-size: 9.6pt;
+      color: var(--muted);
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .section {
+      margin-bottom: 7mm;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="cover">
+      <div>
+        <div class="eyebrow">Wantastic Protocol Paper</div>
+        <h1>WUSP</h1>
+        <div class="subtitle">Wantastic USP over WireGuard.<br>A control transport for USP semantics inside an authenticated WireGuard session.</div>
+        <div class="cover-abstract">
+          The idea is simple. The tunnel already exists. It already authenticates peers. It already encrypts traffic. Do not build a second management plane around it. Build one inside it. WUSP carries USP-style device management over a dedicated WireGuard control class, using compact typed frames, bounded datagrams, request correlation, event delivery, and a TR-181 aligned data model. It is purpose-built for Wantastic. It is technically coherent. And it is not finished everywhere that production will eventually demand.
+        </div>
+      </div>
+
+      <div>
+        <div class="rule"></div>
+        <dl class="meta">
+          <dt>Authors</dt>
+          <dd>Abdelkarim Ouazmir &lt;karim@wantastic.app&gt;<br>Adnane A. Zaid &lt;adnane@wantastic.app&gt;</dd>
+          <dt>Date</dt>
+          <dd>April 26, 2026</dd>
+          <dt>Status</dt>
+          <dd>Implementation-backed white paper based on the current Wantastic repository</dd>
+          <dt>Scope</dt>
+          <dd>Transport design, packet structure, controller mechanics, and production readiness</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>1. Design Principle</h2>
+      <p class="lead">WUSP does not try to replace WireGuard. It assumes WireGuard has already solved the expensive problems: key agreement, authenticated peers, encrypted transport, endpoint roaming, and a small attack surface. WUSP begins after decryption. Its job is narrower and harder to fake: carry USP semantics cleanly over a tunnel that already belongs to the device.</p>
+      <p>That choice matters. Standard USP defines messages, records, endpoint identity, and management transport behavior [1]. WireGuard defines a simple authenticated VPN carried over UDP, with cryptokey routing and built-in roaming [2][3]. Wantastic uses both ideas, but not in their default composition. WUSP keeps the USP control vocabulary and TR-181 object model. It replaces the usual message transfer profile with a Wantastic transport that lives entirely inside a WireGuard session.</p>
+      <div class="callout">WUSP is not a new secure tunnel. It is a control plane inside one.</div>
+      <p>In a multi-vendor ecosystem, that would be a heavy trade. In a controlled WireGuard-native system, it is an efficient one. The control port disappears. Certificate exchange at the outer transport disappears. The management path inherits the same reachability as the overlay itself. The protocol surface gets smaller. The code path gets tighter.</p>
+    </section>
+
+    <section class="section compact">
+      <h2>2. Requirements</h2>
+      <p>WUSP is shaped by seven requirements visible in the code.</p>
+      <ol>
+        <li>Tunnel-only transport. No separate management listener.</li>
+        <li>USP-style operations: <span class="small">Get, Set, Add, Delete, GetInstances, Operate, Notify, capability discovery, transfer initiation</span>.</li>
+        <li>TR-181 aligned state with Wantastic extensions under <span class="small">Device.WUSP.*</span>.</li>
+        <li>Bounded UDP-sized control traffic with explicit fragmentation when needed.</li>
+        <li>Typed binary payloads, not ad hoc JSON.</li>
+        <li>Version tolerance across controller and agent builds.</li>
+        <li>Operational behavior fit for dashboards: fast correlation, bounded waits, clear failure.</li>
+      </ol>
+      <p>Those requirements are sensible. They also explain almost every implementation decision that follows.</p>
+    </section>
+
+    <section class="section">
+      <h2>3. Placement in the Stack</h2>
+      <p>WUSP rides on a dedicated WireGuard message class. It is not sent as ordinary inner IP traffic. It is handled before IP routing on receive, and injected directly on send. This gives the device a clean split between overlay data and management control.</p>
+      <div class="mono">USP semantics
+→ WUSP request / response transport
+  → optional nested TR-181 message frame
+    → optional WUSP control fragmentation
+      → WireGuard message type 8
+        → UDP</div>
+      <p>That split is one of the protocol's strongest choices. WireGuard already authenticates the peer before admitting traffic. WUSP then receives a payload that is inside a known secure session, tied to a WireGuard public key, with endpoint roaming already handled below it [2][3].</p>
+    </section>
+
+    <section class="section">
+      <h2>4. Packet Structure</h2>
+
+      <h3>4.1 WireGuard Control Class</h3>
+      <p>The userspace WireGuard implementation assigns WUSP a dedicated transport class:</p>
+      <div class="mono">MessageWUSPType = 8</div>
+      <p>This is not cosmetic. It allows the receiver to distinguish device-management traffic from normal inner packets before IP dispatch. On the Wantastic side, that means WUSP can be processed as a native control plane, not as an application tunneled through a second protocol stack.</p>
+
+      <h3>4.2 Control Fragment Envelope</h3>
+      <p>Large control messages are split by WUSP itself rather than relying on IP fragmentation. That is the correct instinct. RFC 8085 is explicit that IP fragmentation lowers both efficiency and reliability, and that loss of one fragment loses the entire packet [4].</p>
+      <div class="mono">WUSP control fragment
+
+byte 0     : magic      = 0x54
+byte 1     : version    = 0x01
+byte 2     : flags      = bit0 compressed
+bytes 3-10 : message_id = uint64 LE
+bytes 11-14: index      = uint32 LE
+bytes 15-18: count      = uint32 LE
+bytes 19-22: raw_size   = uint32 LE
+bytes 23.. : payload</div>
+      <p>The current implementation uses a conservative control datagram ceiling of 1200 bytes. Pre-fragment LZ4 compression is applied when it helps. That is a sensible engineering trade: fewer datagrams when the payload compresses well, no wasted CPU when it does not.</p>
+
+      <h3>4.3 Control Transport Envelope</h3>
+      <p>Inside the fragment payload is a compact transport envelope for USP operations. This is the real WUSP protocol surface.</p>
+      <div class="mono">WUSP transport header
+
+byte 0     : version
+byte 1     : kind       (1=request, 2=response)
+byte 2     : method
+byte 3     : flags
+bytes 4-11 : request_id = uint64 LE</div>
+      <p>The envelope can carry path strings, compact path selectors, object selectors, metadata, nested TR-181 messages, transfer descriptors, supported data-model descriptions, and supported protocol descriptions. The method space covers:</p>
+      <div class="mono">Get | Set | Add | Delete | GetInstances | Operate | Notify
+GetSupportedDM | GetSupportedProtocol | Upload | Download</div>
+
+      <h3>4.4 Nested TR-181 Message Frame</h3>
+      <p>WUSP uses its own typed message codec for parameter payloads. This is the most technically elegant part of the design. The frame is compact, schema-aware, and still version tolerant.</p>
+      <div class="mono">Nested message header (8 bytes)
+
+bytes 0-1  : magic      = "WU"
+byte  2    : version    = 0x01
+bytes 3-4  : schema_fp  = FNV-16
+byte  5    : flags      = compression, device_id, timestamp
+bytes 6-7  : reserved</div>
+      <p>Fields are encoded with either a stable field ID or an inline path, followed by a one-byte type tag and a compact binary value. Supported value tags include booleans, integers, floats, strings, bytes, time, IPv4, IPv6, prefixes, MAC addresses, and lists.</p>
+
+      <h3>4.5 Selector Compaction and String Fallback</h3>
+      <p>The protocol also defines compact path selectors built from a stable numeric code plus concrete instance numbers. That is good design. But the code takes a pragmatic step further: nested parameter messages are emitted with string paths across the controller-agent boundary when necessary, because path-code registries can drift between independently built binaries. This is a very good example of protocol honesty. A smaller wire format is useless if it breaks on version skew.</p>
+    </section>
+
+    <section class="section">
+      <h2>5. Protocol Semantics</h2>
+      <p>WUSP is USP-aligned, not USP-record compatible. It keeps the control semantics that matter and changes the transport underneath them.</p>
+      <p>TR-369 defines USP around CRUD-ON style messages and a formal object model [1]. WUSP preserves those semantics in a custom envelope:</p>
+      <ul>
+        <li><b>Get</b> returns parameter values or object subtrees.</li>
+        <li><b>Set</b> applies field updates.</li>
+        <li><b>Add</b> creates instances of multi-instance objects.</li>
+        <li><b>Delete</b> removes parameters or object subtrees.</li>
+        <li><b>GetInstances</b> enumerates instantiated rows.</li>
+        <li><b>Operate</b> invokes command paths.</li>
+        <li><b>Notify</b> carries events and subscription management.</li>
+        <li><b>GetSupportedDM</b> and <b>GetSupportedProtocol</b> advertise capability.</li>
+      </ul>
+      <p>Agent-originated events use the Notify path with stable metadata keys. This is how WUSP carries value changes, object creation and deletion, operation completion, and onboarding announcements. The event model is close enough to TR-369 to feel natural, while remaining independent of BBF protobuf records.</p>
+    </section>
+
+    <section class="section">
+      <h2>6. Data Model</h2>
+      <p>The runtime model merges three surfaces: the imported TR-181 device model, the TR-181 WireGuard model, and Wantastic's own WUSP extension. This is not a small point. It means the protocol does not move opaque blobs; it moves device state with declared types, access modes, and object structure.</p>
+      <p>That choice is now even better justified than it would have been a few years ago. Broadband Forum's Device:2.20 model includes <span class="small">Device.WireGuard.*</span> as a first-class object family [6]. Wantastic's WUSP extension sits next to that, not outside it. The result is a management plane that speaks in paths the controller already understands.</p>
+      <p>The most important Wantastic-specific parameters are the ones that describe the transport itself: enablement, status, protocol version, controller identity, compression support, recommended chunk size, transfer window, tunnel-only behavior, and reliability signaling.</p>
+    </section>
+
+    <section class="section">
+      <h2>7. Controller Mechanics</h2>
+      <p>The paper would be incomplete without the controller, because that is where WUSP stops being a format and becomes a transport.</p>
+
+      <h3>7.1 Request Correlation</h3>
+      <p>Every outbound request carries a non-zero 64-bit ID. The controller keeps a pending map keyed by that ID until the response arrives or a timeout fires. This is simple. It is enough. It gives the dashboard deterministic request ownership without making the protocol stateful in the TCP sense.</p>
+
+      <h3>7.2 Fragment Discipline</h3>
+      <p>Incomplete fragment sets are buffered per peer, swept on a timer, and bounded in count. The current code uses a 30 second fragment TTL, a 10 second sweep interval, and a cap of 64 incomplete messages per peer. That is good operational hygiene. It prevents stale fragment buildup and makes memory costs predictable.</p>
+
+      <h3>7.3 Reachability Heuristics</h3>
+      <p>The controller tracks recent inbound WUSP activity and recent failures. After one response timeout or send failure, later operations can fast-fail instead of hanging the user through repeated full deadlines. This is not a standards feature. It is product intelligence. And it is the right thing to do.</p>
+
+      <h3>7.4 Snapshot Strategy</h3>
+      <p>One implementation comment deserves to be elevated into the paper: a full <span class="small">Device.*</span> snapshot can explode into roughly hundreds of control fragments, while targeted state sync stays near a single-fragment response in normal cases. That is why the controller sync path deliberately fetches a curated subset of the tree. This is not a temporary shortcut. It is the protocol acknowledging the physics of UDP.</p>
+    </section>
+
+    <section class="section">
+      <h2>8. Security Model</h2>
+      <p>WUSP inherits its transport security from WireGuard. That is a real advantage. WireGuard's public design emphasizes simple key configuration, authenticated transport packets, a small implementation footprint, and formal verification work on core security properties [2][3][7]. WUSP benefits from that foundation immediately.</p>
+      <p>But this is also where the paper needs to be precise. Standard USP spends substantial effort on certificate handling, endpoint IDs, trusted roles, and record security processing [1]. WUSP does not implement that exact transport trust story. Instead, it substitutes WireGuard peer identity as the outer trust anchor and models additional controller trust under <span class="small">Device.WUSP.*</span>.</p>
+      <p>Today, that WUSP-specific trust model appears stronger in schema than in runtime enforcement. The transport is secure because WireGuard is secure and the overlay already authenticates peers. The finer-grained controller authorization model is not yet equally complete. That distinction matters.</p>
+    </section>
+
+    <section class="section">
+      <h2>9. Performance and Transport Discipline</h2>
+      <p>UDP gives speed and simplicity. It also gives responsibility back to the application. RFC 8085 says so plainly: UDP is unreliable, best effort, and leaves message size, reliability, and congestion behavior to the application or encapsulating protocol [4]. RFC 8899 goes further and recommends Datagram PLPMTUD for robust size adaptation over datagram transports [5].</p>
+      <p>Against that standard, WUSP gets some things right today:</p>
+      <ul>
+        <li>it avoids raw IP fragmentation by fragmenting above WireGuard</li>
+        <li>it keeps a conservative 1200 byte control budget</li>
+        <li>it uses compression selectively</li>
+        <li>it prefers targeted state fetches over giant full-tree pulls</li>
+      </ul>
+      <p>And it leaves some things unfinished:</p>
+      <ul>
+        <li>no DPLPMTUD or equivalent active path-size adaptation</li>
+        <li>no fragment-level ACK or replay for control messages</li>
+        <li>no explicit circuit-breaker behavior beyond timeout-driven failure handling</li>
+      </ul>
+      <p>Those are not academic omissions. They are exactly where controlled deployment and Internet-hard production begin to diverge.</p>
+    </section>
+
+    <section class="section">
+      <h2>10. Transfer Stream</h2>
+      <p>WUSP defines a second frame family for larger uploads and downloads. It has its own magic value, version, session ID, request ID, sequence numbers, offsets, total size, metadata, and phase transitions:</p>
+      <div class="mono">Open → Chunk → Ack → Complete
+                     ↘ Abort</div>
+      <p>This is the right architectural separation. Bulk transfer should not look like an oversized RPC frame. The stream format also supports selective LZ4 chunk compression when the data is likely to benefit.</p>
+      <p>But the honest evaluation is clear: in this repository, the transfer stream is less mature than the core control plane. The frame codec exists. Upload and download verbs exist. Transfer handlers exist on the agent abstraction. What is missing is strong evidence of a fully wired, controller-to-agent, stream-managed, portal-exposed, production-tested end-to-end path. Today the stream is a protocol design with partial implementation, not a finished transport subsystem.</p>
+    </section>
+
+    <section class="section">
+      <h2>11. Honest Evaluation</h2>
+      <p>WUSP is not experimental in the casual sense. There is real engineering here. The control path is coherent. The data model is disciplined. The controller behavior is thoughtful. The protocol uses the WireGuard substrate intelligently instead of fighting it.</p>
+      <p>Its strongest decisions are these:</p>
+      <ul>
+        <li>put management inside the authenticated tunnel</li>
+        <li>separate control traffic from inner IP payloads at the WireGuard layer</li>
+        <li>use typed TR-181 frames instead of untyped blobs</li>
+        <li>treat version skew as a design condition, not an accident</li>
+        <li>optimize for real operator workflows, not protocol purity alone</li>
+      </ul>
+      <p>Its weakest areas are also plain:</p>
+      <ul>
+        <li>large fragmented control responses remain loss-sensitive</li>
+        <li>transport reliability is implied more than fully implemented</li>
+        <li>bulk transfer is not yet at parity with the core control plane</li>
+        <li>WUSP-specific trust enforcement is not as mature as the schema suggests</li>
+        <li>the protocol is private and wire-incompatible with standard USP MTPs</li>
+      </ul>
+      <div class="callout">The right conclusion is not “WUSP is unfinished.” The right conclusion is “WUSP is strong where it is narrow, and still incomplete where it becomes transport.”</div>
+    </section>
+
+    <section class="section">
+      <h2>12. Production Readiness for Wantastic</h2>
+      <p>For Wantastic, the answer is not binary.</p>
+      <p><b>Yes</b>, WUSP is credible for controlled production use today if the workload is targeted device management: narrow state sync, low-volume Get and Set, live event delivery, controller operations, and snapshot-oriented flows.</p>
+      <p><b>No</b>, it is not yet ready to be described as fully production-hardened for arbitrary large control exchanges, broad Internet path variability, or a complete bulk-transfer story.</p>
+
+      <h3>What should ship before broad production</h3>
+      <ol>
+        <li><b>Path-size adaptation.</b> Implement RFC 8899 style DPLPMTUD or an equivalent probing strategy. Static ceilings are helpful. They are not enough.</li>
+        <li><b>Fragment recovery.</b> Add control-fragment ACK, replay, or another deterministic recovery mechanism. Timeouts alone are not transport completeness.</li>
+        <li><b>Circuit breaker behavior.</b> RFC 8085 recommends protective behavior for UDP applications and tunnels that do not implement full congestion control [4]. WUSP should add it explicitly.</li>
+        <li><b>Truthful capability advertisement.</b> Do not advertise reliable transfer as a fact until the transfer path is fully deployed and tested end to end.</li>
+        <li><b>Real controller authorization.</b> Make controller public key, endpoint identity, and trust-role logic part of runtime access decisions, or document clearly that WireGuard identity is the only authority.</li>
+        <li><b>Compatibility testing.</b> Run older and newer controller-agent builds against each other for selector decoding, inline path fallback, and schema drift.</li>
+        <li><b>Loss and soak testing.</b> Test with packet loss, duplication, reordering, roaming, and long-lived sessions. A UDP control plane must prove itself under stress.</li>
+        <li><b>Observability.</b> Export fragment counts, timeout rates, response-size distributions, path-size downgrades, stream aborts, and fast-fail behavior.</li>
+      </ol>
+      <p>If those items land, WUSP moves from “promising controlled transport” to “serious production protocol.” Without them, it remains a strong internal design that still asks too much good luck from the network.</p>
+    </section>
+
+    <section class="section">
+      <h2>13. Conclusion</h2>
+      <p>WUSP gets the main idea exactly right. Do not build another public management plane around a tunnel that already authenticates, encrypts, and roams. Put management inside the tunnel. Keep the wire format small. Keep the data typed. Keep the controller practical.</p>
+      <p>That is what this implementation does. It is elegant in the places that matter most: placement, framing, typing, and operator workflow. It is less complete in the places that real networks eventually punish: adaptive sizing, deterministic fragmented-message recovery, and a finished transfer subsystem.</p>
+      <p>The result is a protocol that is already meaningful, already useful, and not yet fully done.</p>
+    </section>
+
+    <section class="section page-break">
+      <h2>References</h2>
+      <ol class="refs">
+        <li>Broadband Forum, <i>TR-369 User Services Platform</i>, Issue 1. <span class="small">https://www.broadband-forum.org/pdfs/tr-369-1-0-0.pdf</span></li>
+        <li>WireGuard, <i>Protocol and Cryptography</i>. <span class="small">https://www.wireguard.com/protocol/</span></li>
+        <li>Jason A. Donenfeld, <i>WireGuard: Next Generation Kernel Network Tunnel</i>. <span class="small">https://www.wireguard.com/papers/wireguard.pdf</span></li>
+        <li>Eggert, Fairhurst, Shepherd, <i>RFC 8085: UDP Usage Guidelines</i>. <span class="small">https://datatracker.ietf.org/doc/html/rfc8085</span></li>
+        <li>Fairhurst, Jones, Tüxen, Rüngeler, Völker, <i>RFC 8899: Packetization Layer Path MTU Discovery for Datagram Transports</i>. <span class="small">https://datatracker.ietf.org/doc/html/rfc8899</span></li>
+        <li>Broadband Forum USP Data Models, <i>Device:2.20 TR-181 with WireGuard</i>. <span class="small">https://usp-data-models.broadband-forum.org/tr-181-2-20-1-usp-diffs.html</span></li>
+        <li>WireGuard, <i>Formal Verification</i>. <span class="small">https://www.wireguard.com/formal-verification/</span></li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

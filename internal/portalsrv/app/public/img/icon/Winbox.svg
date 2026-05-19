@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="winboxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ea580c;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect x="15" y="15" width="70" height="70" rx="8" fill="#1f2937" stroke="url(#winboxGrad)" stroke-width="3"/>
+  <rect x="15" y="15" width="70" height="15" rx="8" fill="url(#winboxGrad)"/>
+  <circle cx="23" cy="22.5" r="3" fill="#ef4444"/>
+  <circle cx="33" cy="22.5" r="3" fill="#fbbf24"/>
+  <circle cx="43" cy="22.5" r="3" fill="#10b981"/>
+  <rect x="25" y="40" width="15" height="8" rx="2" fill="url(#winboxGrad)" opacity="0.7"/>
+  <rect x="25" y="52" width="25" height="8" rx="2" fill="url(#winboxGrad)" opacity="0.5"/>
+  <rect x="25" y="64" width="35" height="8" rx="2" fill="url(#winboxGrad)" opacity="0.3"/>
+  <circle cx="70" cy="60" r="8" fill="url(#winboxGrad)"/>
+  <path d="M 67 60 L 70 63 L 75 56" stroke="#1f2937" stroke-width="2" fill="none"/>
+</svg>

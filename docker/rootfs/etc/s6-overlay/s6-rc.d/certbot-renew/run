@@ -1,0 +1,49 @@
+#!/usr/bin/with-contenv bash
+# Auto-renew the Let's Encrypt certificate.
+#
+#   - Runs every 12h (LE's recommended cadence).
+#   - certbot renew is a no-op until a cert has been issued, so we don't
+#     need a special "is LE enabled?" marker — the loop just no-ops on
+#     a fresh image.
+#   - After a successful renewal certbot's deploy-hook reloads nginx.
+#
+# Disable by setting WANTASTIC_AUTORENEW=0 in the container env.
+
+set -euo pipefail
+
+if [ "${WANTASTIC_AUTORENEW:-1}" = "0" ]; then
+    echo "[certbot-renew] disabled via WANTASTIC_AUTORENEW=0"
+    exec sleep infinity
+fi
+
+state=/var/lib/wantastic/letsencrypt
+
+# Hook that nginx reloads on renewal. Idempotent; safe to fire even if
+# nginx hasn't loaded the production site config yet.
+mkdir -p "$state/renewal-hooks/deploy"
+cat > "$state/renewal-hooks/deploy/reload-nginx.sh" <<'EOF'
+#!/bin/sh
+exec nginx -s reload 2>/dev/null || true
+EOF
+chmod +x "$state/renewal-hooks/deploy/reload-nginx.sh"
+
+# Wait a minute after start so nginx has time to come up on first boot.
+sleep 60
+
+while true; do
+    if [ -d "$state/live" ]; then
+        echo "[certbot-renew] running renew check at $(date -u +%FT%TZ)"
+        certbot renew \
+            --config-dir="$state" \
+            --work-dir="$state/work" \
+            --logs-dir="$state/logs" \
+            --webroot \
+            --webroot-path="$state/webroot" \
+            --deploy-hook "$state/renewal-hooks/deploy/reload-nginx.sh" \
+            --non-interactive \
+            --quiet || echo "[certbot-renew] renew exit=$?"
+    else
+        echo "[certbot-renew] no certs issued yet, skipping"
+    fi
+    sleep 43200  # 12h
+done

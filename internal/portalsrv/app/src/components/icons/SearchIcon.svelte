@@ -1,0 +1,7 @@
+<script lang="ts">
+  import LucideIcon from "../LucideIcon.svelte";
+  import { SearchIcon } from "./data";
+  export let size: number | string = 24;
+  export let strokeWidth: number | string = 2;
+</script>
+<LucideIcon parts={SearchIcon} {size} {strokeWidth} />

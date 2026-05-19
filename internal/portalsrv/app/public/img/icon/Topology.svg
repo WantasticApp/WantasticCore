@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="topoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a78bfa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="50" cy="20" r="10" fill="url(#topoGrad)"/>
+  <circle cx="25" cy="50" r="8" fill="url(#topoGrad)" opacity="0.8"/>
+  <circle cx="50" cy="50" r="8" fill="url(#topoGrad)" opacity="0.8"/>
+  <circle cx="75" cy="50" r="8" fill="url(#topoGrad)" opacity="0.8"/>
+  <circle cx="25" cy="80" r="8" fill="url(#topoGrad)" opacity="0.6"/>
+  <circle cx="50" cy="80" r="8" fill="url(#topoGrad)" opacity="0.6"/>
+  <circle cx="75" cy="80" r="8" fill="url(#topoGrad)" opacity="0.6"/>
+  <line x1="50" y1="30" x2="25" y2="42" stroke="url(#topoGrad)" stroke-width="2"/>
+  <line x1="50" y1="30" x2="50" y2="42" stroke="url(#topoGrad)" stroke-width="2"/>
+  <line x1="50" y1="30" x2="75" y2="42" stroke="url(#topoGrad)" stroke-width="2"/>
+  <line x1="25" y1="58" x2="25" y2="72" stroke="url(#topoGrad)" stroke-width="1.5" opacity="0.6"/>
+  <line x1="50" y1="58" x2="50" y2="72" stroke="url(#topoGrad)" stroke-width="1.5" opacity="0.6"/>
+  <line x1="75" y1="58" x2="75" y2="72" stroke="url(#topoGrad)" stroke-width="1.5" opacity="0.6"/>
+</svg>

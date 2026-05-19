@@ -1,0 +1,505 @@
+package email
+
+import (
+    "strconv"
+)
+
+// Design System Colors for Wantastic.app
+// Primary Teal: #14b8a6
+// Accent Dark: #0f172a
+// Success Green: #10b981
+// Error Red: #ef4444
+// Background Light: #f8fafc
+// Neutral Gray: #64748b
+
+templ Layout(title string) {
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <meta name="color-scheme" content="light"/>
+        <meta name="supported-color-schemes" content="light"/>
+        <title>{ title }</title>
+        <!--[if mso]>
+        <noscript>
+            <xml>
+                <o:OfficeDocumentSettings>
+                    <o:PixelsPerInch>96</o:PixelsPerInch>
+                </o:OfficeDocumentSettings>
+            </xml>
+        </noscript>
+        <![endif]-->
+        <style lang="scss">
+            :root {
+                color-scheme: light;
+                supported-color-schemes: light;
+            }
+            body {
+                width: 100% !important;
+                height: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-text-size-adjust: 100%;
+                -ms-text-size-adjust: 100%;
+                background-color: #f8fafc;
+            }
+            table {
+                border-collapse: collapse !important;
+                mso-table-lspace: 0pt;
+                mso-table-rspace: 0pt;
+            }
+            img {
+                border: 0;
+                height: auto;
+                line-height: 100%;
+                outline: none;
+                text-decoration: none;
+            }
+            .content-table {
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            }
+            @media screen and (max-width: 600px) {
+                .container {
+                    width: 100% !important;
+                    padding: 20px !important;
+                }
+                .content {
+                    padding: 32px 24px !important;
+                }
+            }
+        </style>
+    </head>
+    <body style="background-color: #f8fafc; padding: 40px 0;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td align="center" style="padding: 0 20px;">
+                    <table class="container" role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; margin: 0 auto;">
+                        <!-- Logo -->
+                        <tr>
+                            <td align="center" style="padding-bottom: 32px;">
+                                <div style="font-size: 28px; font-weight: 800; color: #0f172a; letter-spacing: -1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                                    <span style="color: #14b8a6;">W</span>antastic<span style="color: #64748b; font-weight: 400; font-size: 20px;">.app</span>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <!-- Main Card -->
+                        <tr>
+                            <td class="content-table" style="background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden;">
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                    <tr>
+                                        <td class="content" style="padding: 48px 40px;">
+                                            { children... }
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- Footer Sub-Card -->
+                                    <tr>
+                                        <td style="padding: 32px 40px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0; text-align: center;">
+                                            <p style="margin: 0 0 12px 0; color: #475569; font-size: 14px; font-weight: 500; font-family: -apple-system, sans-serif;">
+                                                Secure Access Made Simple
+                                            </p>
+                                            <div style="font-size: 12px; color: #94a3b8; line-height: 1.6;">
+                                                &copy; 2025 Wantastic. All rights reserved.<br/>
+                                                Encrypted Network Management &bull; Built for Professionals
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                        
+                        <!-- Extra Footer Links -->
+                        <tr>
+                            <td align="center" style="padding-top: 32px;">
+                                <p style="margin: 0; font-size: 11px; color: #cbd5e1; font-family: -apple-system, sans-serif;">
+                                    This is an automated security message. Please do not reply.
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+}
+
+templ VerificationEmail(code string) {
+    @Layout("Verify Your Account") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td align="center">
+                    <div style="display: inline-block; width: 64px; height: 64px; background-color: #f0fdfa; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                    </div>
+                    <h1 style="margin: 0 0 16px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, sans-serif;">Verify Identity</h1>
+                    <p style="margin: 0 0 40px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                        Use the code below to complete your verification and secure your account.
+                    </p>
+                    
+                    <div style="background-color: #f8fafc; border: 2px dashed #14b8a6; border-radius: 12px; padding: 32px; margin-bottom: 32px; text-align: center;">
+                        <div style="font-family: 'SF Mono', 'Roboto Mono', Menlo, Courier, monospace; font-size: 42px; font-weight: 800; letter-spacing: 8px; color: #0f172a;">{ code }</div>
+                    </div>
+                    
+                    <p style="margin: 0; color: #64748b; font-size: 14px; font-family: -apple-system, sans-serif;">
+                        Expires in <strong style="color: #0f172a;">10 minutes</strong>.
+                    </p>
+                </td>
+            </tr>
+        </table>
+    }
+}
+
+templ PasswordResetEmail(code string) {
+    @Layout("Reset Your Password") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td align="center">
+                    <div style="display: inline-block; width: 64px; height: 64px; background-color: #fff1f2; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                        </svg>
+                    </div>
+                    <h1 style="margin: 0 0 16px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, sans-serif;">Reset Password</h1>
+                    <p style="margin: 0 0 40px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                        We received a request to reset your password. If you didn't make this request, you can safely ignore this email.
+                    </p>
+                    
+                    <div style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 32px; margin-bottom: 32px; text-align: center;">
+                        <div style="font-family: 'SF Mono', 'Roboto Mono', Menlo, Courier, monospace; font-size: 42px; font-weight: 800; letter-spacing: 8px; color: #0f172a;">{ code }</div>
+                    </div>
+                    
+                    <p style="margin: 0; color: #ef4444; font-size: 13px; font-family: -apple-system, sans-serif;">
+                        <strong>Security Note:</strong> This code is valid for 10 minutes.
+                    </p>
+                </td>
+            </tr>
+        </table>
+    }
+}
+
+templ ShareInvitationEmail(ownerName, ownerEmail, shareeName, acceptURL string, expiresInDays int) {
+    @Layout("Access Invitation") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td>
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <div style="display: inline-block; width: 64px; height: 64px; background-color: #f0fdfa; border-radius: 50%; margin-bottom: 24px; text-align: center;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </div>
+                        <h1 style="margin: 0 0 12px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, sans-serif;">Access Invitation</h1>
+                        <p style="margin: 0; color: #475569; font-size: 16px; font-family: -apple-system, sans-serif;">
+                            <strong style="color: #0f172a;">{ ownerName }</strong> has invited you to collaborate.
+                        </p>
+                    </div>
+
+                    <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; margin-bottom: 32px; border: 1px solid #e2e8f0;">
+                         <div style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Network Share Name</div>
+                         <div style="color: #0f172a; font-size: 20px; font-weight: 700;">{ shareeName }</div>
+                    </div>
+
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <a href={ templ.SafeURL(acceptURL) } style="display: inline-block; background-color: #14b8a6; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; padding: 18px 48px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(20, 184, 166, 0.3); font-family: -apple-system, sans-serif;">
+                            Accept Invitation
+                        </a>
+                    </div>
+
+                    <p style="margin: 0; color: #64748b; font-size: 13px; text-align: center; font-family: -apple-system, sans-serif;">
+                        Expires in <strong style="color: #0f172a;">{ strconv.Itoa(expiresInDays) } days</strong>.
+                    </p>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 32px;">
+                        <tr>
+                            <td style="padding: 16px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; word-break: break-all; text-align: center;">
+                                <strong>Direct link:</strong><br/>
+                                <a href={ templ.SafeURL(acceptURL) } style="color: #14b8a6; text-decoration: underline;">{ acceptURL }</a>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    }
+}
+
+templ MigrationInvitationEmail(ownerName, ownerEmail string, deviceNames []string, deviceCount int, acceptURL string, expiresInDays int) {
+    @Layout("Device Transfer") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td>
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <div style="display: inline-block; width: 64px; height: 64px; background-color: #f0f9ff; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                        </div>
+                        <h1 style="margin: 0 0 12px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, sans-serif;">Device Transfer</h1>
+                        <p style="margin: 0; color: #475569; font-size: 16px; font-family: -apple-system, sans-serif;">
+                            <strong style="color: #0f172a;">{ ownerName }</strong> wants to transfer ownership of <strong style="color: #14b8a6;">{ strconv.Itoa(deviceCount) } devices</strong>.
+                        </p>
+                    </div>
+
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
+                        <div style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px;">Devices included:</div>
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            for i, name := range deviceNames {
+                                if i < 5 {
+                                    <tr>
+                                        <td style="padding-bottom: 8px; color: #0f172a; font-size: 14px; font-weight: 600; font-family: -apple-system, sans-serif;">
+                                            &bull; { name }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            if deviceCount > 5 {
+                                <tr>
+                                    <td style="color: #94a3b8; font-size: 13px; font-family: -apple-system, sans-serif; font-style: italic;">
+                                        &bull; and { strconv.Itoa(deviceCount - 5) } more...
+                                    </td>
+                                </tr>
+                            }
+                        </table>
+                    </div>
+
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <a href={ templ.SafeURL(acceptURL) } style="display: inline-block; background-color: #14b8a6; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; padding: 18px 48px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(20, 184, 166, 0.3); font-family: -apple-system, sans-serif;">
+                            Accept Transfer
+                        </a>
+                    </div>
+
+                    <p style="margin: 0; color: #64748b; font-size: 13px; text-align: center; font-family: -apple-system, sans-serif;">
+                        Transfer request expires in <strong style="color: #0f172a;">{ strconv.Itoa(expiresInDays) } days</strong>.
+                    </p>
+                </td>
+            </tr>
+        </table>
+    }
+}
+
+templ InactivityWarningEmail(fullName string, daysInactive int) {
+    @Layout("Account Inactivity Notice") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td align="center">
+                    <div style="display: inline-block; width: 64px; height: 64px; background-color: #fffbeb; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </div>
+                    <h1 style="margin: 0 0 16px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">We Miss You</h1>
+                    
+                    <div style="text-align: left;">
+                        <p style="margin: 0 0 24px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                            Hi { fullName },
+                        </p>
+                        
+                        <p style="margin: 0 0 24px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                            We noticed you haven't logged into your Wantastic account for <strong>{ strconv.Itoa(daysInactive) } days</strong>.
+                        </p>
+                        
+                        <div style="background-color: #fefce8; border: 1px solid #fef08a; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
+                            <p style="margin: 0; color: #854d0e; font-size: 14px; line-height: 1.5; font-family: -apple-system, sans-serif;">
+                                Your free account is still here whenever you want to come back. If you need a refresher, our docs are ready for you.
+                            </p>
+                            <p style="margin: 12px 0 0 0; color: #854d0e; font-size: 15px; font-weight: 700; font-family: -apple-system, sans-serif;">
+                                We miss you and would love to have you back in the dashboard.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <a href="https://wantastic.app/docs" style="display: inline-block; background-color: #14b8a6; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; padding: 18px 48px; border-radius: 12px; font-family: -apple-system, sans-serif;">
+                            Visit Wantastic Docs
+                        </a>
+                    </div>
+                    
+                    <p style="margin: 0; color: #94a3b8; font-size: 12px; font-family: -apple-system, sans-serif; text-align: center;">
+                        Your free account is retained, and we may send gentle reminders when it stays inactive for a while.
+                    </p>
+                </td>
+            </tr>
+        </table>
+    }
+}
+
+templ AccountDeletedEmail(fullName string) {
+    @Layout("Account Deleted") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td align="center">
+                    <div style="display: inline-block; width: 64px; height: 64px; background-color: #fee2e2; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </div>
+                    <h1 style="margin: 0 0 16px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Account Deleted</h1>
+                    
+                    <div style="text-align: left;">
+                        <p style="margin: 0 0 24px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                            Hi { fullName },
+                        </p>
+                        
+                        <p style="margin: 0 0 32px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                            Your Wantastic free account has been deleted due to inactivity (45+ days without logging in). All associated data and VPN settings have been removed.
+                        </p>
+                    </div>
+                    
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <a href="https://wantastic.app" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; padding: 18px 48px; border-radius: 12px; font-family: -apple-system, sans-serif;">
+                            Start Fresh
+                        </a>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    }
+}
+
+type EmailPeerInfo struct {
+    Name string
+    IP string
+    Reason string
+    Detail string
+    Duration string
+    LastSeen string
+    StatusColor string
+}
+
+templ PeerOfflineNotificationEmail(fullName string, peers []EmailPeerInfo, unsubscribeURL string) {
+    @Layout("Device Alert") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td>
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <div style="display: inline-block; width: 64px; height: 64px; background-color: #fff1f2; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                        </div>
+                        <h1 style="margin: 0 0 12px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Device Alert</h1>
+                        <p style="margin: 0; color: #ef4444; font-size: 16px; font-weight: 700; font-family: -apple-system, sans-serif;">
+                            { strconv.Itoa(len(peers)) } device(s) offline
+                        </p>
+                    </div>
+
+                    <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; font-family: -apple-system, sans-serif;">
+                        Hi { fullName }, the following devices in your network have gone offline:
+                    </p>
+
+                    <div style="overflow: hidden; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 32px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%;">
+                            <thead style="background-color: #f8fafc;">
+                                <tr>
+                                    <th style="padding: 16px; text-align: left; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Device</th>
+                                    <th style="padding: 16px; text-align: left; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Status</th>
+                                    <th style="padding: 16px; text-align: left; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                for _, peer := range peers {
+                                    <tr>
+                                        <td style="padding: 16px; border-bottom: 1px solid #f1f5f9;">
+                                            <div style="font-weight: 700; color: #0f172a; font-size: 14px;">{ peer.Name }</div>
+                                            <div style="color: #64748b; font-size: 12px;">{ peer.IP }</div>
+                                        </td>
+                                        <td style="padding: 16px; border-bottom: 1px solid #f1f5f9;">
+                                            <span style={ "color: #ffffff; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; background-color: " + peer.StatusColor }>
+                                                { peer.Reason }
+                                            </span>
+                                        </td>
+                                        <td style="padding: 16px; border-bottom: 1px solid #f1f5f9; color: #475569; font-size: 13px;">
+                                            { peer.Duration }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <a href="https://wantastic.app" style="display: inline-block; background-color: #14b8a6; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; padding: 16px 32px; border-radius: 12px; font-family: -apple-system, sans-serif;">
+                            Open Dashboard
+                        </a>
+                    </div>
+
+                    if unsubscribeURL != "" {
+                        <div style="text-align: center;">
+                            <a href={ templ.SafeURL(unsubscribeURL) } style="color: #94a3b8; font-size: 11px; text-decoration: underline; font-family: -apple-system, sans-serif;">
+                                Unsubscribe from device alerts
+                            </a>
+                        </div>
+                    }
+                </td>
+            </tr>
+        </table>
+    }
+}
+
+templ GenericEmail(title string, bodyHTML string) {
+    @Layout(title) {
+        @templ.Raw(bodyHTML)
+    }
+}
+
+templ SecurityAlertEmail(actionDescription, alertURL string) {
+    @Layout("Security Alert") {
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+                <td align="center">
+                    <div style="display: inline-block; width: 64px; height: 64px; background-color: #fef2f2; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 16px;">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+                    <h1 style="margin: 0 0 16px 0; color: #0f172a; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, sans-serif;">Security Alert</h1>
+                    
+                    <div style="text-align: left; margin-bottom: 32px;">
+                        <p style="margin: 0 0 16px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                            We detected a sensitive action on your account:
+                        </p>
+                        <div style="background-color: #fff1f2; border-left: 4px solid #ef4444; padding: 16px; margin-bottom: 24px;">
+                            <p style="margin: 0; color: #991b1b; font-weight: 600; font-family: -apple-system, sans-serif;">
+                                { actionDescription }
+                            </p>
+                        </div>
+                        <p style="margin: 0 0 24px 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                            If this was you, you can safely ignore this email.
+                        </p>
+                        <p style="margin: 0; color: #475569; font-size: 16px; line-height: 1.6; font-family: -apple-system, sans-serif;">
+                            <strong>If you did not authorize this action, please click the button below immediately to secure your account.</strong> This will invalidate all active sessions and allow you to reset your password.
+                        </p>
+                    </div>
+                    
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <a href={ templ.SafeURL(alertURL) } style="display: inline-block; background-color: #dc2626; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; padding: 18px 48px; border-radius: 12px; font-family: -apple-system, sans-serif;">
+                            It Wasn't Me - Secure Account
+                        </a>
+                    </div>
+                    
+                    <p style="margin: 0; color: #94a3b8; font-size: 12px; font-family: -apple-system, sans-serif; text-align: center;">
+                        This link is valid for 24 hours.
+                    </p>
+                </td>
+            </tr>
+        </table>
+    }
+}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="billingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect x="15" y="30" width="70" height="45" rx="5" fill="url(#billingGrad)" stroke="#b45309" stroke-width="2"/>
+  <rect x="15" y="30" width="70" height="12" rx="5" fill="#78350f" opacity="0.3"/>
+  <rect x="20" y="48" width="25" height="8" rx="2" fill="#fbbf24" opacity="0.8"/>
+  <circle cx="72" cy="60" r="8" fill="#fbbf24" stroke="#b45309" stroke-width="2"/>
+  <text x="68" y="64" fill="#b45309" font-family="Arial" font-size="10" font-weight="bold">$</text>
+</svg>

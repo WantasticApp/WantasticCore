@@ -1,0 +1,63 @@
+#!/usr/bin/with-contenv bash
+# Bring up PostgreSQL on a per-image data dir.
+# On first boot, initdb the cluster, stamp a generated superuser password
+# (read by wantastic-core via /var/lib/wantastic/config/db.password), and
+# create the wantastic database. On every boot, clean any stale postmaster.pid
+# left by an ungraceful shutdown, then exec the real postmaster.
+
+set -euo pipefail
+
+PGDATA=/var/lib/wantastic/postgres
+PWFILE=/var/lib/wantastic/config/db.password
+LOGDIR=/var/lib/wantastic/logs
+BOOTSTRAP_LOG=$LOGDIR/postgres.bootstrap.log
+
+mkdir -p "$PGDATA" "$LOGDIR" /run/postgresql /var/lib/wantastic/config
+chown -R postgres:postgres "$PGDATA" /run/postgresql
+chown postgres:postgres "$LOGDIR" 2>/dev/null || true
+
+# One-time cluster bootstrap.
+if [ ! -s "$PGDATA/PG_VERSION" ]; then
+    echo "[postgres] initdb (first boot)"
+    if [ ! -s "$PWFILE" ]; then
+        openssl rand -hex 24 > "$PWFILE"
+        chmod 600 "$PWFILE"
+    fi
+    chown postgres:postgres "$PWFILE"
+
+    su-exec postgres /usr/bin/initdb \
+        --username=wantastic \
+        --pwfile="$PWFILE" \
+        --auth-local=trust \
+        --auth-host=scram-sha-256 \
+        --encoding=UTF8 \
+        -D "$PGDATA"
+
+    {
+        echo "listen_addresses = '127.0.0.1'"
+        echo "port = 5432"
+        echo "shared_buffers = 128MB"
+        echo "max_connections = 100"
+        echo "log_timezone = 'UTC'"
+        echo "timezone = 'UTC'"
+    } >> "$PGDATA/postgresql.conf"
+    {
+        echo "local   all   all                            trust"
+        echo "host    all   all   127.0.0.1/32             scram-sha-256"
+        echo "host    all   all   ::1/128                  scram-sha-256"
+    } > "$PGDATA/pg_hba.conf"
+    chown postgres:postgres "$PGDATA/postgresql.conf" "$PGDATA/pg_hba.conf"
+
+    # Create the wantastic database via single-user mode — avoids forking
+    # a postmaster (which leaves stale shmem blocks that the main postmaster
+    # then can't reuse).
+    echo "CREATE DATABASE wantastic OWNER wantastic;" \
+        | su-exec postgres /usr/bin/postgres --single -D "$PGDATA" postgres \
+            > "$BOOTSTRAP_LOG" 2>&1
+fi
+
+# Remove any stale lock left by a previous ungraceful shutdown — the kernel
+# already cleaned up the actual lock when the old PID died.
+rm -f "$PGDATA/postmaster.pid"
+
+exec su-exec postgres /usr/bin/postgres -D "$PGDATA"

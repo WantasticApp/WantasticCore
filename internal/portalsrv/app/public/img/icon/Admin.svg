@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Shield (admin = privileged) with a key inside -->
+  <defs>
+    <linearGradient id="adminGrad" x1="0" y1="0" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7c6af7"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+  <path d="M24 4l16 6v12c0 9-6.7 17.2-16 20-9.3-2.8-16-11-16-20V10l16-6z"
+        fill="url(#adminGrad)"/>
+  <!-- Key bow -->
+  <circle cx="20" cy="22" r="5.5" fill="none" stroke="#ffffff" stroke-width="2.2"/>
+  <!-- Key shaft + teeth -->
+  <path d="M25 22h11M32 22v4M36 22v3" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="20" cy="22" r="1.8" fill="#ffffff"/>
+</svg>
