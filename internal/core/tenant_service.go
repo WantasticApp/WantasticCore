@@ -4941,6 +4941,113 @@ func (s *TenantPortalServiceServer) CreateTenantWinboxSession(ctx context.Contex
 	}, nil
 }
 
+// DuplicateTenantWinboxSession clones an existing Winbox session under a new
+// name. Router target, port, allowed-client list, auth method, and — most
+// importantly — the encrypted credential blobs are copied byte for byte from
+// the source row, so the caller doesn't need to re-enter the password (the
+// server never decrypts the cleartext during the operation). Fresh access /
+// password tokens are minted so the new row is a fully independent identity
+// that can be edited or revoked without touching the source.
+func (s *TenantPortalServiceServer) DuplicateTenantWinboxSession(ctx context.Context, req *proto.DuplicateTenantWinboxSessionRequest) (*proto.DuplicateTenantWinboxSessionResponse, error) {
+	if req.TenantId == "" {
+		return nil, errs.InvalidArgumentE("tenant_id is required")
+	}
+	if req.SessionId == "" {
+		return nil, errs.InvalidArgumentE("session_id is required")
+	}
+	if req.NewName == "" {
+		return nil, errs.InvalidArgumentE("new_name is required")
+	}
+	ctx = s.withResolvedCallerContext(ctx, req.TenantId)
+
+	peerStore := s.server.GetPeerStore()
+	src, err := peerStore.GetWinboxSession(req.SessionId)
+	if err != nil || src == nil {
+		return nil, errs.NotFoundf("source winbox session not found")
+	}
+
+	// Resolve scope + tag access via the peer the source session lives on.
+	ctx, overlayAccountID, foundPeer, usedScope, err := s.resolveAccountForPeer(ctx, req.TenantId, src.PeerID)
+	if err != nil {
+		return nil, errs.NotFoundf("peer not found: %v", err)
+	}
+	effectiveTenantID := req.TenantId
+	if usedScope != nil {
+		effectiveTenantID = usedScope.TenantID
+	}
+	if err := checkTagAccess(ctx, foundPeer, effectiveTenantID); err != nil {
+		return nil, err
+	}
+
+	// Enforce the same tier cap that gates Create.
+	acc, err := s.server.GetAccount(overlayAccountID)
+	if err != nil {
+		return nil, errs.Internalf("failed to get account details: %v", err)
+	}
+	if existing, err := peerStore.ListAllWinboxSessions(overlayAccountID); err == nil {
+		max := acc.BlockCount * 29
+		if len(existing) >= max {
+			return nil, errs.FailedPreconditionf("maximum number of Winbox sessions reached for your tier (max: %d)", max)
+		}
+		// Reject duplicate names on the same peer up front so the caller
+		// gets a clear error rather than a generic uniqueness violation.
+		for _, ws := range existing {
+			if ws.PeerID == src.PeerID && strings.EqualFold(ws.Name, req.NewName) {
+				return nil, errs.AlreadyExistsf("a winbox account named %q already exists on that peer", req.NewName)
+			}
+		}
+	}
+
+	// Fresh access + password tokens — the duplicate is a fully independent
+	// identity, not an alias of the source.
+	accessToken, err := generateAccessToken()
+	if err != nil {
+		return nil, errs.Internalf("failed to generate access token: %v", err)
+	}
+	passwordToken, err := generateAccessToken()
+	if err != nil {
+		return nil, errs.Internalf("failed to generate password token: %v", err)
+	}
+
+	now := time.Now().UTC()
+	session := server.WinboxSession{
+		ID:                       uuid.New().String(),
+		Name:                     req.NewName,
+		RouterIP:                 src.RouterIP,
+		Port:                     src.Port,
+		AccessToken:              accessToken,
+		PasswordToken:            passwordToken,
+		EncryptedUsername:        append([]byte(nil), src.EncryptedUsername...),
+		EncryptedPassword:        append([]byte(nil), src.EncryptedPassword...),
+		AuthMethod:               src.AuthMethod,
+		AllowedClientIPs:         append([]string(nil), src.AllowedClientIPs...),
+		CredentialsValid:         src.CredentialsValid,
+		RouterOSAPIVerified:      src.RouterOSAPIVerified,
+		RouterOSAPILastValidated: src.RouterOSAPILastValidated,
+		RouterOSAPIPort:          src.RouterOSAPIPort,
+		RouterOSAPITLS:           src.RouterOSAPITLS,
+		CreatedAt:                now,
+		UpdatedAt:                now,
+		Enabled:                  true,
+	}
+
+	foundPeer.WinboxSessions = append(foundPeer.WinboxSessions, session)
+	foundPeer.HasWinbox = foundPeer.ScannedWinboxPort > 0 || len(foundPeer.WinboxSessions) > 0
+	foundPeer.UpdatedAt = now
+
+	if err := peerStore.SaveWinboxSession(overlayAccountID, src.PeerID, &session); err != nil {
+		return nil, errs.Internalf("failed to save winbox session: %v", err)
+	}
+	if err := peerStore.SavePeer(foundPeer); err != nil {
+		return nil, errs.Internalf("failed to save peer: %v", err)
+	}
+
+	pbSession := winboxSessionToProto(overlayAccountID, src.PeerID, &session)
+	enrichWinboxSessionSharedFlags(ctx, pbSession, effectiveTenantID, overlayAccountID)
+
+	return &proto.DuplicateTenantWinboxSessionResponse{Session: pbSession}, nil
+}
+
 // UpdateTenantWinboxSession updates session parameters
 func (s *TenantPortalServiceServer) UpdateTenantWinboxSession(ctx context.Context, req *proto.UpdateTenantWinboxSessionRequest) (*proto.UpdateTenantWinboxSessionResponse, error) {
 	if req.TenantId == "" {

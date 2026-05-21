@@ -908,6 +908,7 @@ func NewTenantProxyWithTLS(services *core.Services, router *InProcessRouter, ses
 		"CreateTenantWinboxSession",
 		"UpdateTenantWinboxSession",
 		"DeleteTenantWinboxSession",
+		"DuplicateTenantWinboxSession",
 		"ListTenantWinboxSessions",
 		"GetTenantWinboxSession",
 		// ACL Management (tenant-scoped)
@@ -3334,6 +3335,25 @@ func (p *TenantProxy) handleTenantPeerService(ctx context.Context, msg *Message,
 		resp, err := portalClient.DeleteTenantWinboxSession(ctx, &req)
 		if err != nil {
 			return errorResponse(msg.ID, err)
+		}
+		return protoResponse(msg.ID, resp)
+
+	case "DuplicateTenantWinboxSession":
+		if err := session.checkSharePerm("manage_winbox"); err != nil {
+			return errorResponse(msg.ID, err)
+		}
+		var req pb.DuplicateTenantWinboxSessionRequest
+		if err := json.Unmarshal(msg.Request, &req); err != nil {
+			return errorResponse(msg.ID, fmt.Errorf("invalid request: %s", err.Error()))
+		}
+		req.TenantId = callerTenantID
+
+		resp, err := portalClient.DuplicateTenantWinboxSession(ctx, &req)
+		if err != nil {
+			return errorResponse(msg.ID, err)
+		}
+		if session.needsWinboxFocusedShareFallback(resp.Session) {
+			session.enrichWinboxForFocusedShare(resp.Session)
 		}
 		return protoResponse(msg.ID, resp)
 

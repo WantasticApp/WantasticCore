@@ -164,6 +164,156 @@ func tenantTools() []Tool {
 				return fmt.Sprintf("account %s — networks=%v peers=%d/%d", accID, networks, resp.GetPeerCount(), resp.GetMaxPeers())
 			},
 		},
+		{
+			Name:        "open_webssh",
+			Description: "Return the connection details needed to open a browser-based SSH session against one of the caller's devices: peer name, overlay IP, detected SSH port, and online status. The user opens WebSSH by clicking the terminal icon next to the peer in the Peers app — quote the peer name in the reply so they can find it.",
+			InputSchema: `{"type":"object","properties":{"target":{"type":"string","description":"peer id or name to open SSH on"}},"required":["target"],"additionalProperties":false}`,
+			Run: func(ctx context.Context, svc *Service, input json.RawMessage) string {
+				var args struct {
+					Target string `json:"target"`
+				}
+				if err := json.Unmarshal(input, &args); err != nil {
+					return "error: bad input: " + err.Error()
+				}
+				if args.Target == "" {
+					return "error: target is required"
+				}
+				tenantID := tenantIDFromCtx(ctx)
+				svcCtx := withCallerMetadata(ctx, tenantID)
+				list, err := svc.services.TenantPortal.ListTenantPeers(svcCtx, &pb.ListTenantPeersRequest{TenantId: tenantID})
+				if err != nil {
+					return "error: list peers: " + err.Error()
+				}
+				var match *pb.Peer
+				for _, p := range list.GetPeers() {
+					if p.GetId() == args.Target || strings.EqualFold(p.GetName(), args.Target) {
+						match = p
+						break
+					}
+				}
+				if match == nil {
+					return "not-found: no peer matched " + args.Target
+				}
+				port := match.GetScannedSshPort()
+				portStr := "22 (default — not yet port-scanned)"
+				if port > 0 {
+					portStr = fmt.Sprintf("%d (port-scan confirmed)", port)
+				}
+				return fmt.Sprintf("webssh ready for %q: ip=%s port=%s online=%v. Tell the user to click the terminal icon next to %q in the Peers app to launch it in the browser.",
+					match.GetName(), match.GetAssignedIp(), portStr, match.GetIsOnline(), match.GetName())
+			},
+		},
+		{
+			Name:        "list_winbox_accounts",
+			Description: "List the Winbox/RouterOS sessions configured under the caller's devices. Pass a peer id/name to filter to one device, or omit it to list across all the caller's peers.",
+			InputSchema: `{"type":"object","properties":{"peer":{"type":"string","description":"optional peer id or name to filter to"}},"additionalProperties":false}`,
+			Run: func(ctx context.Context, svc *Service, input json.RawMessage) string {
+				var args struct {
+					Peer string `json:"peer"`
+				}
+				if err := json.Unmarshal(input, &args); err != nil {
+					return "error: bad input: " + err.Error()
+				}
+				tenantID := tenantIDFromCtx(ctx)
+				svcCtx := withCallerMetadata(ctx, tenantID)
+				peerID := ""
+				if args.Peer != "" {
+					list, err := svc.services.TenantPortal.ListTenantPeers(svcCtx, &pb.ListTenantPeersRequest{TenantId: tenantID})
+					if err != nil {
+						return "error: list peers: " + err.Error()
+					}
+					for _, p := range list.GetPeers() {
+						if p.GetId() == args.Peer || strings.EqualFold(p.GetName(), args.Peer) {
+							peerID = p.GetId()
+							break
+						}
+					}
+					if peerID == "" {
+						return "not-found: no peer matched " + args.Peer
+					}
+				}
+				resp, err := svc.services.TenantPortal.ListTenantWinboxSessions(svcCtx, &pb.ListTenantWinboxSessionsRequest{
+					TenantId: tenantID,
+					PeerId:   peerID,
+				})
+				if err != nil {
+					return "error: " + err.Error()
+				}
+				if len(resp.GetSessions()) == 0 {
+					if args.Peer != "" {
+						return "no winbox accounts on " + args.Peer + "."
+					}
+					return "no winbox accounts."
+				}
+				var b strings.Builder
+				fmt.Fprintf(&b, "%d winbox account(s):\n", len(resp.GetSessions()))
+				for _, s := range resp.GetSessions() {
+					api := "no"
+					if s.GetRouterosApiVerified() {
+						scheme := "api"
+						if s.GetRouterosApiTls() {
+							scheme = "api-ssl"
+						}
+						api = fmt.Sprintf("%s:%d", scheme, s.GetRouterosApiPort())
+					}
+					fmt.Fprintf(&b, "- %q on peer %s — router=%s creds_valid=%v api=%s\n",
+						s.GetName(), s.GetPeerId(), s.GetRouterIp(), s.GetCredentialsValid(), api)
+				}
+				return b.String()
+			},
+		},
+		{
+			Name:        "duplicate_winbox_account",
+			Description: "Clone an existing Winbox account under a NEW NAME on the same peer. The encrypted username + password are copied byte for byte from the source, so the user does not need to re-enter credentials. Only the name is required.",
+			InputSchema: `{"type":"object","properties":{"source_name":{"type":"string","description":"name of the existing Winbox account to clone from"},"new_name":{"type":"string","description":"name for the duplicated account"}},"required":["source_name","new_name"],"additionalProperties":false}`,
+			Run: func(ctx context.Context, svc *Service, input json.RawMessage) string {
+				var args struct {
+					SourceName string `json:"source_name"`
+					NewName    string `json:"new_name"`
+				}
+				if err := json.Unmarshal(input, &args); err != nil {
+					return "error: bad input: " + err.Error()
+				}
+				if args.SourceName == "" || args.NewName == "" {
+					return "error: source_name and new_name are both required"
+				}
+				if strings.EqualFold(args.SourceName, args.NewName) {
+					return "error: new_name must differ from source_name"
+				}
+				tenantID := tenantIDFromCtx(ctx)
+				svcCtx := withCallerMetadata(ctx, tenantID)
+				// Resolve source name → session id so the caller can refer to
+				// the account by its human-readable name rather than UUID.
+				list, err := svc.services.TenantPortal.ListTenantWinboxSessions(svcCtx, &pb.ListTenantWinboxSessionsRequest{TenantId: tenantID})
+				if err != nil {
+					return "error: list winbox sessions: " + err.Error()
+				}
+				var sourceID string
+				for _, s := range list.GetSessions() {
+					if strings.EqualFold(s.GetName(), args.SourceName) || s.GetId() == args.SourceName {
+						sourceID = s.GetId()
+						break
+					}
+				}
+				if sourceID == "" {
+					return "not-found: no winbox account named " + args.SourceName
+				}
+				resp, err := svc.services.TenantPortal.DuplicateTenantWinboxSession(svcCtx, &pb.DuplicateTenantWinboxSessionRequest{
+					TenantId:  tenantID,
+					SessionId: sourceID,
+					NewName:   args.NewName,
+				})
+				if err != nil {
+					return "error: duplicate winbox session: " + err.Error()
+				}
+				out := resp.GetSession()
+				if out == nil {
+					return "warning: server accepted the request but returned no session payload"
+				}
+				return fmt.Sprintf("created %q (id=%s) on peer %s as a duplicate of %q — encrypted credentials carried over, no password re-entry needed",
+					out.GetName(), out.GetId(), out.GetPeerId(), args.SourceName)
+			},
+		},
 	}
 }
 

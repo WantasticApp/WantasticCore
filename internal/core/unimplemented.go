@@ -584,6 +584,10 @@ func (UnimplementedTenantPortalService) CreateTenantWinboxSession(context.Contex
 	return nil, errs.UnimplementedE("TenantPortalService.CreateTenantWinboxSession")
 }
 
+func (UnimplementedTenantPortalService) DuplicateTenantWinboxSession(context.Context, *pb.DuplicateTenantWinboxSessionRequest) (*pb.DuplicateTenantWinboxSessionResponse, error)  {
+	return nil, errs.UnimplementedE("TenantPortalService.DuplicateTenantWinboxSession")
+}
+
 func (UnimplementedTenantPortalService) UpdateTenantWinboxSession(context.Context, *pb.UpdateTenantWinboxSessionRequest) (*pb.UpdateTenantWinboxSessionResponse, error)  {
 	return nil, errs.UnimplementedE("TenantPortalService.UpdateTenantWinboxSession")
 }

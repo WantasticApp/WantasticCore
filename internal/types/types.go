@@ -7106,6 +7106,39 @@ func (x *DeleteTenantWinboxSessionResponse) GetMessage() string {
 	return x.Message
 }
 
+// DuplicateTenantWinboxSessionRequest copies an existing Winbox session into
+// a new row under a new name. The router target, port, allowed-client list
+// and — importantly — the encrypted credential blobs are carried over byte
+// for byte, so the operation needs only the new name from the user.
+// Cleartext credentials never leave the server.
+type DuplicateTenantWinboxSessionRequest struct {
+	TenantId  string `json:"tenant_id,omitempty"`
+	SessionId string `json:"session_id,omitempty"`
+	NewName   string `json:"new_name,omitempty"`
+}
+
+func (x *DuplicateTenantWinboxSessionRequest) GetTenantId() string {
+	if x == nil { return "" }
+	return x.TenantId
+}
+func (x *DuplicateTenantWinboxSessionRequest) GetSessionId() string {
+	if x == nil { return "" }
+	return x.SessionId
+}
+func (x *DuplicateTenantWinboxSessionRequest) GetNewName() string {
+	if x == nil { return "" }
+	return x.NewName
+}
+
+type DuplicateTenantWinboxSessionResponse struct {
+	Session *WinboxSession `json:"session,omitempty"`
+}
+
+func (x *DuplicateTenantWinboxSessionResponse) GetSession() *WinboxSession {
+	if x == nil { return nil }
+	return x.Session
+}
+
 type ListTenantWinboxSessionsRequest struct {
 	TenantId string `json:"tenant_id,omitempty"`
 	PeerId string `json:"peer_id,omitempty"`

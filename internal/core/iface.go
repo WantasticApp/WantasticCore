@@ -326,6 +326,10 @@ type TenantPortalService interface {
 	UpdateTenantWinboxSession(context.Context, *pb.UpdateTenantWinboxSessionRequest) (*pb.UpdateTenantWinboxSessionResponse, error)
 	// Delete Winbox session
 	DeleteTenantWinboxSession(context.Context, *pb.DeleteTenantWinboxSessionRequest) (*pb.DeleteTenantWinboxSessionResponse, error)
+	// Duplicate Winbox session — copy an existing row under a new name. The
+	// encrypted credentials are carried over byte for byte; no cleartext
+	// password is required from the caller.
+	DuplicateTenantWinboxSession(context.Context, *pb.DuplicateTenantWinboxSessionRequest) (*pb.DuplicateTenantWinboxSessionResponse, error)
 	// List Winbox sessions
 	ListTenantWinboxSessions(context.Context, *pb.ListTenantWinboxSessionsRequest) (*pb.ListTenantWinboxSessionsResponse, error)
 	// Get Winbox session
