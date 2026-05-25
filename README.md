@@ -70,16 +70,12 @@ admin account, and optional Let's Encrypt in about a minute.
 
 <details open>
 <summary><b>Add a peer with the native WireGuard client</b></summary>
-
-https://github.com/WantasticApp/WantasticCore/raw/main/docs/guide/add-with-native-wg-client.mp4
-
+[Add a peer with the native WireGuard client](https://youtu.be/0TI0VS_7T7M)
 </details>
 
 <details>
 <summary><b>WUSP in action</b> — live device push, port scan, browser SSH</summary>
-
-https://github.com/WantasticApp/WantasticCore/raw/main/docs/guide/wusp.mp4
-
+[WUSP in action](https://youtu.be/Gl19EVDwVa0)
 </details>
 
 ## Build from source
