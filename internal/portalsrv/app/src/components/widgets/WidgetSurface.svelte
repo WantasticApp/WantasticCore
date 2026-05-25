@@ -769,6 +769,43 @@
     .widget-surface.mobile {
       top: clamp(236px, 48vh, 360px);
       max-height: calc(100% - clamp(236px, 48vh, 360px) - 14px);
+      /* On phones the surface scrolls vertically — let it stretch full
+         width and stack the rail pages instead of forcing 12-col grid. */
+      left: 8px;
+      right: 8px;
+      inset: clamp(236px, 48vh, 360px) 8px 14px 8px;
+    }
+
+    /* Stack the rail's pages so users scroll one-handed instead of
+       swiping horizontally across a tiny screen. */
+    .widget-rail {
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scroll-snap-type: none;
+    }
+    .rail-page {
+      width: 100%;
+      flex: 0 0 auto;
+      scroll-snap-align: none;
+      padding: 0;
+    }
+    .rail-dots {
+      display: none;
+    }
+
+    /* Each card spans the full width with the grid auto-stacking. */
+    .widget-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .widget-slot,
+    .widget-slot.size-small,
+    .widget-slot.size-wide,
+    .widget-slot.size-tall {
+      grid-column: 1 / -1 !important;
+      grid-row: auto !important;
+      min-height: 0;
     }
 
     .empty-panel {
