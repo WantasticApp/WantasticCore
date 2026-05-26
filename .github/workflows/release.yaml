@@ -47,7 +47,7 @@ jobs:
           node-version: '20'
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           # Match the local toolchain: app/pnpm-workspace.yaml uses
           # onlyBuiltDependencies (pnpm 10), and pnpm 9 errors with
