@@ -6,7 +6,7 @@ toolchain go1.25.10
 
 require (
 	github.com/a-h/templ v0.3.977
-	github.com/anthropics/anthropic-sdk-go v1.36.0
+	github.com/anthropics/anthropic-sdk-go v1.45.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -30,8 +30,10 @@ require (
 	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/BurntSushi/freetype-go v0.0.0-20160129220410-b763ddbfe298 // indirect
 	github.com/BurntSushi/graphics-go v0.0.0-20160129215708-b43f31a4a966 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/bamiaux/rez v0.0.0-20170731184118-29f4463c688b // indirect
 	github.com/beeper/argo-go v1.1.2 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -43,11 +45,13 @@ require (
 	github.com/go-pg/zerochecker v0.2.0 // indirect
 	github.com/gonutz/w32/v2 v2.12.1 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
+	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-sixel v0.0.5 // indirect
 	github.com/mattn/go-tty v0.0.7 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -61,6 +65,7 @@ require (
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/soniakeys/quant v1.0.0 // indirect
 	github.com/srlehn/xgbutil v0.0.0-20230718194130-098830f60574 // indirect
+	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -73,6 +78,7 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.3.4 // indirect
 	github.com/vmihailenco/tagparser v0.1.2 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
+	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.mau.fi/libsignal v0.2.1 // indirect
 	go.mau.fi/util v0.9.6 // indirect
