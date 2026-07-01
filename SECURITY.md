@@ -68,3 +68,22 @@ CI runs `make vulncheck` on every release tag.
   compiler). Not exploitable in the deployed binary; tracked in the
   Dependabot config so they don't generate PR noise. The fix is a Svelte
   3 → 5 + Vite 4 → 5 migration; that's planned but separate.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
