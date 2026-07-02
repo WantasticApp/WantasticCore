@@ -32,6 +32,7 @@
 
   type DashboardSection = "overview" | RouterOSResourceKey;
   type EditorMode = "add" | "edit" | null;
+  type LooseTimestamp = ProtoTimestamp | { seconds?: number; nanos?: number } | string;
 
   interface SectionMeta {
     key: DashboardSection;
@@ -679,7 +680,7 @@
       .map(([key, value]) => ({ key, value: String(value ?? "") }));
   }
 
-  function compactIdentityPairs(source: Record<string, unknown>) {
+  function compactIdentityPairs(source: object | null | undefined) {
     const raw: Record<string, string> = {};
     for (const [key, value] of Object.entries(source || {})) {
       if (typeof value === "string" && value.trim()) {
@@ -709,15 +710,15 @@
       .replace(/\b\w/g, (match) => match.toUpperCase());
   }
 
-  function formatTimestamp(value?: ProtoTimestamp | string) {
-    const date = protoToDate(value || null);
+  function formatTimestamp(value?: LooseTimestamp) {
+    const date = protoToDate((value || null) as ProtoTimestamp | string | null);
     return date ? date.toLocaleString() : "Never";
   }
 
   function formatRelativeTimestamp(
-    value?: ProtoTimestamp | string,
+    value?: LooseTimestamp,
   ) {
-    const date = protoToDate(value || null);
+    const date = protoToDate((value || null) as ProtoTimestamp | string | null);
     if (!date) return "Never";
     const deltaMs = Date.now() - date.getTime();
     if (deltaMs < 60_000) return "Just now";

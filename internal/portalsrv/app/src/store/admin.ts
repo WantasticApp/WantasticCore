@@ -15,6 +15,15 @@ export interface AdminTenant {
   created_at: string;
 }
 
+export type AdminAccount = AdminTenant;
+
+export interface AdminStats {
+  total_accounts?: number;
+  active_accounts?: number;
+  total_peers?: number;
+  online_peers?: number;
+}
+
 export interface AdminState {
   tenants: AdminTenant[];
   isLoading: boolean;

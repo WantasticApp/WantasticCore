@@ -6,6 +6,15 @@ import { derived, get, writable } from "svelte/store";
 // Re-export ProtoTimestamp for backwards compatibility
 export type { ProtoTimestamp };
 
+export interface MeshNode {
+  name?: string;
+  mac?: string;
+  ip?: string;
+  role?: string;
+  signal: number;
+  children?: MeshNode[];
+}
+
 // Helper to convert protobuf timestamp to Date (uses UTC-aware utility)
 export function protoToDate(
   ts: ProtoTimestamp | string | undefined | null
