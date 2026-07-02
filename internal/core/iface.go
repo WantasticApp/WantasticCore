@@ -121,6 +121,8 @@ type AuthService interface {
 	ValidateSession(context.Context, *pb.ValidateSessionRequest) (*pb.ValidateSessionResponse, error)
 	// RegisterDevice provisions a WireGuard peer for an authenticated agent.
 	RegisterDevice(context.Context, *pb.RegisterDeviceRequest) (*pb.RegisterDeviceResponse, error)
+	// GetClaimedDeviceConfig returns non-secret tunnel settings after a QR public key is claimed.
+	GetClaimedDeviceConfig(context.Context, *pb.GetClaimedDeviceConfigRequest) (*pb.GetClaimedDeviceConfigResponse, error)
 	// RefreshToken refreshes an existing authentication token.
 	RefreshToken(context.Context, *pb.DeviceRefreshTokenRequest) (*pb.DeviceRefreshTokenResponse, error)
 	// GetConfiguration retrieves the current WireGuard configuration for a device.
@@ -462,4 +464,3 @@ type RouterOSServiceHandler interface {
 	// DeleteResource removes a RouterOS record by .id.
 	DeleteResource(context.Context, *pb.DeleteRouterOSResourceRequest) (*pb.MutateRouterOSResourceResponse, error)
 }
-

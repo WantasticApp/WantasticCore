@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import AppWindow from "$components/AppWindow.svelte";
-  import { peerStore, protoToDate, type Peer } from "$store/peer";
+  import { peerStore, protoToDate, type Peer, type ProtoTimestamp } from "$store/peer";
   import {
     routerOSStore,
     type RouterOSRecord,
@@ -668,15 +668,15 @@
       .map(([key]) => key);
   }
 
-  function topPairs(source: Record<string, string>, limit: number) {
+  function topPairs(source: Record<string, unknown>, limit: number) {
     return sortFieldEntries(source).slice(0, limit);
   }
 
-  function sortFieldEntries(fields: Record<string, string>) {
+  function sortFieldEntries(fields: Record<string, unknown>) {
     return Object.entries(fields)
       .filter(([key]) => !isMetaField(key))
       .sort(([left], [right]) => compareFieldKeys(left, right))
-      .map(([key, value]) => ({ key, value }));
+      .map(([key, value]) => ({ key, value: String(value ?? "") }));
   }
 
   function compactIdentityPairs(source: Record<string, unknown>) {
@@ -709,13 +709,13 @@
       .replace(/\b\w/g, (match) => match.toUpperCase());
   }
 
-  function formatTimestamp(value?: { seconds?: number; nanos?: number } | string) {
+  function formatTimestamp(value?: ProtoTimestamp | string) {
     const date = protoToDate(value || null);
     return date ? date.toLocaleString() : "Never";
   }
 
   function formatRelativeTimestamp(
-    value?: { seconds?: number; nanos?: number } | string,
+    value?: ProtoTimestamp | string,
   ) {
     const date = protoToDate(value || null);
     if (!date) return "Never";

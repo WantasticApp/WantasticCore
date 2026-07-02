@@ -10,6 +10,7 @@
   import { authStore } from "$store/auth";
   import { snapshotStore, type DeviceSnapshot } from "$store/snapshot";
   import { activeThing, appZIndexes, bringToFront, openedApps } from "$store/store";
+  import QRCode from "qrcode";
   import {
     widgetStore,
     WIDGET_DEFINITIONS,
@@ -71,9 +72,22 @@
   // Enrollment Script
   let showEnrollmentScript = false;
   let selectedTokenId = "";
+  let claimPublicKey = "";
+  let claimQrCodeDataUrl = "";
+  let claimQrSource = "";
+  let claimQrSeq = 0;
   $: selectedToken =
     tokens.find((t) => t.id === selectedTokenId) ||
     (tokens.length > 0 ? tokens[0] : null);
+
+  $: portalOrigin =
+    typeof window !== "undefined" ? window.location.origin : "https://console.wantastic.app";
+  $: claimPublicKeyTrimmed = claimPublicKey.trim();
+  $: claimPublicKeyParam = encodeURIComponent(claimPublicKeyTrimmed);
+  $: claimUrl = claimPublicKeyTrimmed
+    ? `${portalOrigin}/#desktop?claim_public_key=${claimPublicKeyParam}`
+    : `${portalOrigin}/#desktop?claim_public_key=<PUBLIC_KEY>`;
+  $: claimFactoryCommand = `wantasticd genkey --out /etc/wantastic/device-claim-key.json --server-url ${portalOrigin}`;
 
   $: enrollmentCommand = selectedToken
     ? `curl -sSL https://get.wantastic.app/install.sh | sh -s -- ${selectedToken.token}`
@@ -440,6 +454,51 @@
     }
     secretsLoading = false;
     statusBar = "Ready";
+  }
+
+  function handleClaimPublicKeyInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    claimPublicKey = target.value;
+  }
+
+  function clearClaimPublicKey() {
+    claimPublicKey = "";
+    claimQrCodeDataUrl = "";
+    claimQrSource = "";
+  }
+
+  async function updateClaimQRCode(url: string) {
+    const source = url.trim();
+    const seq = ++claimQrSeq;
+    if (!claimPublicKeyTrimmed) {
+      claimQrCodeDataUrl = "";
+      claimQrSource = "";
+      return;
+    }
+    try {
+      const dataUrl = await QRCode.toDataURL(source, {
+        width: 192,
+        margin: 1,
+        color: {
+          dark: "#111827",
+          light: "#ffffff",
+        },
+      });
+      if (seq === claimQrSeq) {
+        claimQrCodeDataUrl = dataUrl;
+        claimQrSource = source;
+      }
+    } catch (err) {
+      console.error("Failed to generate claim QR:", err);
+      if (seq === claimQrSeq) {
+        claimQrCodeDataUrl = "";
+        claimQrSource = "";
+      }
+    }
+  }
+
+  $: if (activeTab === "tokens" && claimPublicKeyTrimmed && claimUrl !== claimQrSource) {
+    void updateClaimQRCode(claimUrl);
   }
 
   async function handleCreateSecret() {
@@ -2220,6 +2279,113 @@
             <!-- <p class="text-sm text-gray-400 mb-6 font-medium tracking-tight">
               {$_("secrets.intro")}
             </p> -->
+
+            <div class="claim-key-card">
+              <div class="claim-key-main">
+                <div class="claim-key-heading">
+                  <div class="claim-key-icon">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                      <path d="M14 14h3v3h-3zM20 14h1v1M20 18h1v3h-3M14 20h1" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4>Device claim QR</h4>
+                    <p>Generate a fixed QR for sold devices using the device public key.</p>
+                  </div>
+                </div>
+
+                <div class="claim-command-row">
+                  <code>{claimFactoryCommand}</code>
+                  <button
+                    class="claim-icon-btn"
+                    type="button"
+                    on:click={() => copy.text(claimFactoryCommand, "genkey command")}
+                    title="Copy genkey command"
+                  >
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div class="claim-input-grid">
+                  <div class="claim-input-field">
+                    <label for="claim-public-key">claim_public_key</label>
+                    <input
+                      id="claim-public-key"
+                      type="text"
+                      value={claimPublicKey}
+                      on:input={handleClaimPublicKeyInput}
+                      placeholder="Paste wantasticd genkey public key"
+                      spellcheck="false"
+                    />
+                  </div>
+                  <div class="claim-actions">
+                    <button
+                      class="claim-action"
+                      type="button"
+                      disabled={!claimPublicKeyTrimmed}
+                      on:click={() => copy.text(claimUrl, "Claim URL")}
+                    >
+                      Copy URL
+                    </button>
+                    <button
+                      class="claim-action muted"
+                      type="button"
+                      disabled={!claimPublicKeyTrimmed}
+                      on:click={clearClaimPublicKey}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div class="claim-url-row" class:empty={!claimPublicKeyTrimmed}>
+                  <span>{claimUrl}</span>
+                </div>
+              </div>
+
+              <div class="claim-qr-panel">
+                {#if claimQrCodeDataUrl}
+                  <img src={claimQrCodeDataUrl} alt="Device claim QR" />
+                {:else}
+                  <div class="claim-qr-placeholder">
+                    <svg
+                      width="32"
+                      height="32"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    >
+                      <rect x="3" y="3" width="7" height="7" />
+                      <rect x="14" y="3" width="7" height="7" />
+                      <rect x="3" y="14" width="7" height="7" />
+                      <path d="M14 14h2v2h-2zM20 14h1v1M17 17h4v4h-4z" />
+                    </svg>
+                    <span>Paste a public key</span>
+                  </div>
+                {/if}
+              </div>
+            </div>
 
             <div class="mb-6 flex flex-col gap-4">
               <div
@@ -5048,6 +5214,205 @@
     line-height: 1.5;
   }
 
+  .claim-key-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 176px;
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 18px;
+    padding: 16px;
+    border: 1px solid rgb(var(--clrPrm) / 18%);
+    border-radius: 8px;
+    background: linear-gradient(
+      135deg,
+      rgb(var(--clrPrm) / 9%),
+      rgb(var(--bg3) / 52%)
+    );
+  }
+
+  .claim-key-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .claim-key-heading {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+
+    h4 {
+      margin: 0;
+      color: rgb(var(--clr));
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 3px 0 0;
+      color: rgb(var(--clr) / 58%);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+  }
+
+  .claim-key-icon {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 8px;
+    background: rgb(var(--clrPrm) / 12%);
+    color: rgb(var(--clrPrm));
+    border: 1px solid rgb(var(--clrPrm) / 18%);
+  }
+
+  .claim-command-row,
+  .claim-url-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid rgb(var(--clr) / 9%);
+    border-radius: 6px;
+    background: rgb(var(--bg1) / 60%);
+  }
+
+  .claim-command-row code,
+  .claim-url-row span {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgb(var(--clr) / 78%);
+  }
+
+  .claim-url-row.empty span {
+    color: rgb(var(--clr) / 42%);
+  }
+
+  .claim-icon-btn {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgb(var(--clr) / 10%);
+    border-radius: 6px;
+    background: rgb(var(--clr) / 5%);
+    color: rgb(var(--clr) / 70%);
+    cursor: pointer;
+    transition: all 0.16s ease;
+
+    &:hover {
+      border-color: rgb(var(--clrPrm) / 34%);
+      color: rgb(var(--clrPrm));
+      background: rgb(var(--clrPrm) / 10%);
+    }
+  }
+
+  .claim-input-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .claim-input-field {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    label {
+      color: rgb(var(--clr) / 62%);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    input {
+      width: 100%;
+      height: 34px;
+      padding: 0 10px;
+      border-radius: 6px;
+      border: 1px solid rgb(var(--clr) / 12%);
+      background: rgb(var(--bg2));
+      color: rgb(var(--clr));
+      font-family: var(--font-mono);
+      font-size: 12px;
+      outline: none;
+
+      &:focus {
+        border-color: rgb(var(--clrPrm) / 56%);
+        box-shadow: 0 0 0 2px rgb(var(--clrPrm) / 10%);
+      }
+    }
+  }
+
+  .claim-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .claim-action {
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: 1px solid rgb(var(--clrPrm) / 30%);
+    background: rgb(var(--clrPrm) / 12%);
+    color: rgb(var(--clrPrm));
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+
+    &.muted {
+      border-color: rgb(var(--clr) / 12%);
+      background: rgb(var(--clr) / 5%);
+      color: rgb(var(--clr) / 68%);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  .claim-qr-panel {
+    width: 176px;
+    min-height: 176px;
+    display: grid;
+    place-items: center;
+    align-self: center;
+    border: 1px solid rgb(var(--clr) / 10%);
+    border-radius: 8px;
+    background: #fff;
+
+    img {
+      width: 156px;
+      height: 156px;
+      object-fit: contain;
+      display: block;
+    }
+  }
+
+  .claim-qr-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: rgb(17 24 39 / 46%);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
   .create-token-form {
     background: rgb(var(--bg3) / 50%);
     border: 1px solid rgb(var(--clr) / 10%);
@@ -5556,12 +5921,46 @@
   }
 
   @media (max-width: 920px) {
+    .claim-key-card {
+      grid-template-columns: 1fr;
+    }
+
+    .claim-qr-panel {
+      width: 100%;
+      min-height: 164px;
+    }
+
     .widgets-header {
       align-items: flex-start;
     }
   }
 
   @media (max-width: 768px) {
+    .claim-input-grid {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .claim-actions {
+      width: 100%;
+    }
+
+    .claim-action {
+      flex: 1;
+    }
+
+    .claim-command-row,
+    .claim-url-row {
+      align-items: flex-start;
+    }
+
+    .claim-command-row code,
+    .claim-url-row span {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.45;
+    }
+
     .widgets-body {
       gap: 12px;
     }

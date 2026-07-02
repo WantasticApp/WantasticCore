@@ -101,12 +101,13 @@
 
     // Get first name for friendly greeting
     $: peerName = $onboardingPeer?.name || "Device";
-    $: selectedPlatformTab =
+    $: selectedPlatformTab = (
         selectedDevice === "wireguard"
             ? "wireguard"
             : selectedDevice === "openwrt"
               ? "unix"
-              : "mikrotik";
+              : "mikrotik"
+    ) as PeerConfigTab;
 </script>
 
 <div

@@ -203,6 +203,10 @@ func (UnimplementedAuthService) RegisterDevice(context.Context, *pb.RegisterDevi
 	return nil, errs.UnimplementedE("AuthService.RegisterDevice")
 }
 
+func (UnimplementedAuthService) GetClaimedDeviceConfig(context.Context, *pb.GetClaimedDeviceConfigRequest) (*pb.GetClaimedDeviceConfigResponse, error)  {
+	return nil, errs.UnimplementedE("AuthService.GetClaimedDeviceConfig")
+}
+
 func (UnimplementedAuthService) RefreshToken(context.Context, *pb.DeviceRefreshTokenRequest) (*pb.DeviceRefreshTokenResponse, error)  {
 	return nil, errs.UnimplementedE("AuthService.RefreshToken")
 }
@@ -849,4 +853,3 @@ func (UnimplementedRouterOSServiceHandler) UpdateResource(context.Context, *pb.M
 func (UnimplementedRouterOSServiceHandler) DeleteResource(context.Context, *pb.DeleteRouterOSResourceRequest) (*pb.MutateRouterOSResourceResponse, error)  {
 	return nil, errs.UnimplementedE("RouterOSServiceHandler.DeleteResource")
 }
-

@@ -26,6 +26,9 @@
   let name = "";
   let isLoading = false;
   let error = "";
+  let claimPublicKey = "";
+  let claimServerBase = "";
+  let claimKeyEntryMode = false;
   let createSshAccount = false;
   let createWinboxAccount = false;
 
@@ -46,8 +49,90 @@
   let provisionAfterCreate = false;
   let selectedSnapshotId = "";
   $: wuspSnapshots = $snapshotStore.snapshots.filter((s: DeviceSnapshot) => s.protocol === "wusp");
+  $: isClaimMode = claimKeyEntryMode || claimPublicKey.trim().length > 0;
+  $: claimServerHost =
+    claimServerBase.trim() ||
+    (typeof window !== "undefined" ? window.location.origin : "https://console.wantastic.app");
+
+  function getClaimPublicKeyFromURL(): string {
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.slice(1);
+    const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+    const hashParams = new URLSearchParams(hashQuery);
+    return (
+      hashParams.get("claim_public_key") ||
+      hashParams.get("public_key") ||
+      hashParams.get("pk") ||
+      params.get("claim_public_key") ||
+      params.get("public_key") ||
+      params.get("pk") ||
+      ""
+    ).trim();
+  }
+
+  function getScannedClaimServerFromURL(): string {
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.slice(1);
+    const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+    const hashParams = new URLSearchParams(hashQuery);
+    return (
+      hashParams.get("wantastic_server") ||
+      hashParams.get("server") ||
+      hashParams.get("domain") ||
+      params.get("wantastic_server") ||
+      params.get("server") ||
+      params.get("domain") ||
+      ""
+    ).trim();
+  }
+
+  function normalizeClaimServer(value: string): string {
+    const raw = value.trim();
+    if (!raw) return "";
+    try {
+      const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+      const url = new URL(withScheme);
+      return url.origin;
+    } catch {
+      return "";
+    }
+  }
+
+  function getClaimServerFromURL(): string {
+    const scanned = normalizeClaimServer(getScannedClaimServerFromURL());
+    const saved = normalizeClaimServer(localStorage.getItem("wantastic_claim_server") || "");
+    if (saved && saved !== scanned) return saved;
+    return scanned || saved || (typeof window !== "undefined" ? window.location.origin : "https://console.wantastic.app");
+  }
+
+  function currentOrigin(): string {
+    return typeof window !== "undefined" ? window.location.origin : "";
+  }
+
+  function redirectToClaimServerIfNeeded(): boolean {
+    if (!isClaimMode) return false;
+    const normalized = normalizeClaimServer(claimServerHost);
+    if (!normalized) {
+      error = "Enter a valid Wantastic server domain or leave it as the default";
+      return true;
+    }
+    localStorage.setItem("wantastic_claim_server", normalized);
+    if (currentOrigin() && normalized !== currentOrigin()) {
+      const key = encodeURIComponent(claimPublicKey.trim());
+      window.location.href = `${normalized}/#desktop?claim_public_key=${key}&wantastic_server=${encodeURIComponent(normalized)}`;
+      return true;
+    }
+    claimServerBase = normalized;
+    return false;
+  }
 
   onMount(async () => {
+    claimPublicKey = getClaimPublicKeyFromURL();
+    claimKeyEntryMode = claimPublicKey.trim().length > 0;
+    claimServerBase = normalizeClaimServer(getClaimServerFromURL());
+    if (claimPublicKey && !name) {
+      name = "Wantastic Device";
+    }
     // Load WUSP snapshots so user can optionally provision the new device
     snapshotStore.list("wusp").catch(() => {});
   });
@@ -61,8 +146,15 @@
   }
 
   async function handleSubmit() {
+    if (redirectToClaimServerIfNeeded()) {
+      return;
+    }
     if (!name.trim()) {
       error = "Device name is required";
+      return;
+    }
+    if (isClaimMode && !claimPublicKey.trim()) {
+      error = "Device claim QR is missing the public key";
       return;
     }
 
@@ -94,7 +186,9 @@
 
     try {
       // Create the peer first
-      const peer = await peerStore.addPeer(name);
+      const peer = await peerStore.addPeer(name, {
+        publicKey: isClaimMode ? claimPublicKey.trim() : "",
+      });
 
       // If auto-create is enabled, create SSH and Winbox sessions
       if (createSshAccount || createWinboxAccount) {
@@ -177,10 +271,17 @@
       $openedApps = $openedApps.filter((app) => app !== "AddPeer");
 
       // Open Onboarding Guide
-      if (!$openedApps.includes("OnboardingGuide")) {
+      if (!isClaimMode && !$openedApps.includes("OnboardingGuide")) {
         $openedApps = [...$openedApps, "OnboardingGuide"];
         $activeThing = "OnboardingGuide";
         $appZIndexes["OnboardingGuide"] = zIndex + 1;
+      } else if (isClaimMode) {
+        if (!$openedApps.includes("Peers")) {
+          $openedApps = [...$openedApps, "Peers"];
+        }
+        $activeThing = "Peers";
+        bringToFront("Peers");
+        toasts.success("Wantastic device claimed");
       }
     } catch (err: any) {
       error = err.message || "Failed to add Device";
@@ -212,7 +313,7 @@
     on:close={handleCancel}
   >
     <img src="img/icon/Peers.svg" alt="Peers" height="16" width="16" />
-    <span class="appName pl-2">Add New Device</span>
+    <span class="appName pl-2">{isClaimMode ? "Claim Wantastic Device" : "Add New Device"}</span>
   </Titlebar>
   <div class="mainApp">
     <form class="form-content" on:submit|preventDefault={handleSubmit}>
@@ -230,13 +331,67 @@
           id="name"
           type="text"
           bind:value={name}
-          placeholder="My Device"
+          placeholder={isClaimMode ? "Wantastic Device" : "My Device"}
           required
           autofocus
         />
-        <span class="help-text">Enter a friendly name for this device</span>
+        <span class="help-text">{isClaimMode ? "Name this device before adding it to your team" : "Enter a friendly name for this device"}</span>
       </div>
 
+      {#if !claimKeyEntryMode && !claimPublicKey.trim()}
+        <div class="add-methods">
+          <button type="button" class="method-option active">
+            <strong>1. Standard</strong>
+            <span>Create a new WireGuard device</span>
+          </button>
+          <button type="button" class="method-option" on:click={() => (createSshAccount = !createSshAccount)}>
+            <strong>2. SSH</strong>
+            <span>Add SSH access details</span>
+          </button>
+          <button type="button" class="method-option" on:click={() => (createWinboxAccount = !createWinboxAccount)}>
+            <strong>3. Winbox</strong>
+            <span>Add RouterOS access details</span>
+          </button>
+          <button type="button" class="method-option" on:click={() => (claimKeyEntryMode = true)}>
+            <strong>4. Claim key</strong>
+            <span>Claim a pre-generated device</span>
+          </button>
+        </div>
+      {/if}
+
+      {#if isClaimMode}
+        <div class="form-group">
+          <label for="claim-public-key-input">Claim public key</label>
+          <TextBox
+            id="claim-public-key-input"
+            type="text"
+            bind:value={claimPublicKey}
+            placeholder="Paste the device public key"
+            required={isClaimMode}
+          />
+          <span class="help-text">Use the public key printed by <code>wantasticd genkey</code> or embedded in the device QR.</span>
+        </div>
+
+        <div class="form-group claim-server-group">
+          <label for="claim-server">Wantastic server</label>
+          <TextBox
+            id="claim-server"
+            type="text"
+            bind:value={claimServerBase}
+            placeholder="https://console.wantastic.app"
+          />
+          <span class="help-text">Optional. Change this before claiming if the QR should be claimed on another Wantastic domain.</span>
+        </div>
+
+        {#if claimPublicKey.trim()}
+        <div class="claim-key">
+          <label for="claim-key">Device public key</label>
+          <code id="claim-key">{claimPublicKey}</code>
+        </div>
+        {/if}
+      {/if}
+
+      {#if !isClaimMode}
       <div class="form-group toggle-group">
         <div class="toggle-label-row">
           <label for="create-ssh">Create SSH account</label>
@@ -250,8 +405,9 @@
           >Create sessions immediately after device is added</span
         >
       </div>
+      {/if}
 
-      {#if createSshAccount || createWinboxAccount}
+      {#if !isClaimMode && (createSshAccount || createWinboxAccount)}
         <div class="credentials-section">
           {#if createSshAccount}
             <div class="section-title">SSH Credentials</div>
@@ -375,7 +531,7 @@
           {#if isLoading || creatingAccounts}
             {creatingAccounts ? "Creating accounts..." : "Adding..."}
           {:else}
-            Add Device
+            {isClaimMode && normalizeClaimServer(claimServerHost) !== currentOrigin() ? "Continue on Server" : isClaimMode ? "Claim Device" : "Add Device"}
           {/if}
         </Button>
       </div>
@@ -438,6 +594,44 @@
     }
   }
 
+  .add-methods {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .method-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-height: 74px;
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.42);
+    color: rgb(var(--clr));
+    text-align: left;
+    cursor: pointer;
+
+    strong {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    span {
+      color: rgb(var(--clr) / 62%);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    &:hover,
+    &.active {
+      border-color: rgba(59, 130, 246, 0.65);
+      background: rgba(37, 99, 235, 0.14);
+    }
+  }
+
   .toggle-group {
     gap: 4px;
 
@@ -478,6 +672,39 @@
   .help-text {
     font-size: 12px;
     color: rgb(var(--clr) / 50%);
+  }
+
+  .claim-key {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: rgb(var(--bg3));
+    border: 1px solid rgb(var(--clr) / 12%);
+    border-radius: 6px;
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgb(var(--clr) / 90%);
+    }
+
+    code {
+      display: block;
+      overflow-wrap: anywhere;
+      padding: 8px 10px;
+      border-radius: 5px;
+      background: rgb(var(--bg2));
+      color: rgb(var(--clr) / 80%);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+  }
+
+  .claim-server-group :global(input) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
   }
 
   .credentials-section {
@@ -555,6 +782,10 @@
     .form-row {
       flex-direction: column;
       gap: 12px;
+    }
+
+    .add-methods {
+      grid-template-columns: 1fr;
     }
 
     .toggle-group .toggle-label-row {

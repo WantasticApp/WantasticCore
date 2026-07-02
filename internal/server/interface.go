@@ -16,6 +16,7 @@ type OverlayServer interface {
 	AddPeer(accountID, peerName string, assignedIP string) (*PeerInfo, error)
 	AddPeerWithKey(accountID, peerName, assignedIP, publicKey string) (*PeerInfo, error)
 	GetPeer(accountID, peerID string) (*PeerMetadata, error)
+	FindPeer(peerID string) (*PeerMetadata, error)
 	UpdatePeer(peer *PeerMetadata) error
 	GetNextAvailablePeerIP(accountID string) (string, error)
 	ListPeers(accountID string) ([]*PeerMetadata, error)

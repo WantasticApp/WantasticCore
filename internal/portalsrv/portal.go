@@ -19,14 +19,14 @@ import (
 	"strings"
 	"time"
 
-	proto "WantasticCore/internal/types"
-	"WantasticCore/internal/errs"
 	core "WantasticCore/internal/core"
+	"WantasticCore/internal/errs"
 	"WantasticCore/internal/portalsrv/hooks"
 	"WantasticCore/internal/portalsrv/middleware"
 	"WantasticCore/internal/portalsrv/pkg/cipher"
-	"WantasticCore/internal/portalsrv/pkg/session"
 	"WantasticCore/internal/portalsrv/pkg/services"
+	"WantasticCore/internal/portalsrv/pkg/session"
+	proto "WantasticCore/internal/types"
 
 	"WantasticCore/internal/admin"
 	"WantasticCore/internal/auth"
@@ -409,6 +409,7 @@ func (app *portalApp) setupRoutes() *http.ServeMux {
 	mux.HandleFunc("/api/logout", rateLimiterSmall.Middleware(securityMiddleware.Middleware(app.handleLogout)))
 	mux.HandleFunc("/api/device-handoff", rateLimiterSmall.Middleware(app.handleDeviceHandoff))
 	mux.HandleFunc("/api/agent/credentials", rateLimiterSmall.Middleware(app.handleAgentCredentials))
+	mux.HandleFunc("/api/agent/claim-config", rateLimiterSmall.Middleware(app.handleAgentClaimConfig))
 	mux.HandleFunc("/api/snapshot/download", rateLimiterSmall.Middleware(app.handleSnapshotDownload))
 	mux.HandleFunc("/ws", rateLimiterSmall.Middleware(app.tenantProxy.HandleWebSocket))
 
@@ -858,6 +859,13 @@ func safePrefix(s string) string {
 	return s[:8] + "..."
 }
 
+func shortLogValue(value string) string {
+	if len(value) <= 12 {
+		return value
+	}
+	return value[:12] + "..."
+}
+
 // handleAgentCredentials is the endpoint Wantastic agents call before starting
 // the HTTP OAuth2 device flow. It proves the caller is a genuine Wantastic agent
 // by validating the device-specific cipher signature, then returns the public
@@ -909,6 +917,57 @@ func (app *portalApp) handleAgentCredentialsGet(w http.ResponseWriter, r *http.R
 		"auth0_client_id": clientID,
 		"domain":          domain,
 		"client_id":       clientID,
+	})
+}
+
+func (app *portalApp) handleAgentClaimConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	deviceID, err := app.cipherInterceptor.ValidateHTTPRequest(r)
+	if err != nil {
+		zlog.Warn().Err(err).
+			Str("remote", r.RemoteAddr).
+			Msg("handleAgentClaimConfig: cipher validation failed")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	publicKey := strings.TrimSpace(r.URL.Query().Get("public_key"))
+	if publicKey == "" {
+		http.Error(w, "public_key required", http.StatusBadRequest)
+		return
+	}
+	if app.services == nil || app.services.Auth == nil {
+		http.Error(w, "Core not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	resp, err := app.services.Auth.GetClaimedDeviceConfig(r.Context(), &proto.GetClaimedDeviceConfigRequest{
+		PublicKey: publicKey,
+	})
+	if err != nil {
+		zlog.Error().Err(err).
+			Str("device_id", deviceID).
+			Str("public_key", shortLogValue(publicKey)).
+			Msg("handleAgentClaimConfig: GetClaimedDeviceConfig failed")
+		http.Error(w, "Claim config unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"claimed":              resp.Claimed,
+		"public_key":           resp.PublicKey,
+		"assigned_ip":          resp.AssignedIp,
+		"server_key":           resp.ServerKey,
+		"endpoint":             resp.Endpoint,
+		"allowed_ips":          resp.AllowedIps,
+		"dns_servers":          resp.DnsServers,
+		"persistent_keepalive": resp.PersistentKeepalive,
+		"mtu":                  resp.Mtu,
+		"listen_port":          resp.ListenPort,
 	})
 }
 

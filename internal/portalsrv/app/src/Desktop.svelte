@@ -158,6 +158,32 @@
     hideContextMenu();
   }
 
+  function getClaimPublicKeyFromURL(): string {
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.slice(1);
+    const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+    const hashParams = new URLSearchParams(hashQuery);
+    return (
+      hashParams.get("claim_public_key") ||
+      hashParams.get("public_key") ||
+      hashParams.get("pk") ||
+      params.get("claim_public_key") ||
+      params.get("public_key") ||
+      params.get("pk") ||
+      ""
+    ).trim();
+  }
+
+  function openClaimDeviceWindow() {
+    const publicKey = getClaimPublicKeyFromURL();
+    if (!publicKey) return;
+    if (!$openedApps.includes("AddPeer")) {
+      $openedApps = [...$openedApps, "AddPeer"];
+    }
+    $activeThing = "AddPeer";
+    bringToFront("AddPeer");
+  }
+
   onMount(async () => {
     // Load saved icon order (mobile launcher)
     loadIconOrder();
@@ -175,6 +201,7 @@
       toggleOpenApp("AddPeer");
       await cookieStore.delete("firsttime");
     }
+    openClaimDeviceWindow();
   });
   function setGradientBackground() {
     $desktopBackground = DEFAULT_DESKTOP_BACKGROUND;

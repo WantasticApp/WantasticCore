@@ -183,7 +183,9 @@
       case "protected":
         if (!authenticated) {
           // Save intended destination and redirect to login
-          const intended = `#${page}${window.location.search}`;
+          const hashFrag = window.location.hash.slice(1);
+          const hashSearch = hashFrag.includes("?") ? hashFrag.slice(hashFrag.indexOf("?")) : "";
+          const intended = `#${page}${hashSearch || window.location.search}`;
           sessionStorage.setItem("returnUrl", intended);
           window.location.hash = "#login";
           return "login";
@@ -334,12 +336,25 @@
       currentPage = applyGuard(resolveRoute(), isAuthenticated);
     };
 
+    const handleSessionExpired = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      const current = window.location.hash || `#${currentPage}${window.location.search}`;
+      if (current && !current.startsWith("#login")) {
+        sessionStorage.setItem("returnUrl", current);
+      }
+      authStore.expireSession(detail?.message || "Session expired");
+      currentPage = "login";
+      window.location.hash = "#login";
+    };
+
     window.addEventListener("hashchange", handleRouteChange);
     window.addEventListener("popstate",   handleRouteChange);
+    window.addEventListener("wantastic:session-expired", handleSessionExpired);
 
     return () => {
       window.removeEventListener("hashchange", handleRouteChange);
       window.removeEventListener("popstate",   handleRouteChange);
+      window.removeEventListener("wantastic:session-expired", handleSessionExpired);
     };
   });
 </script>

@@ -75,6 +75,14 @@ export interface GRPCResponse {
   error?: string;
 }
 
+export interface CallGRPCOptions {
+  /**
+   * Expected anonymous probes like authStore.checkSession() should fail as
+   * "not signed in" without dispatching the global session-expired event.
+   */
+  suppressAuthExpiredEvent?: boolean;
+}
+
 export class ApiError extends Error {
   constructor(public code: string, public status: number, message: string) {
     super(message);
@@ -140,10 +148,33 @@ function createWebSocketStore() {
   const MAX_RECONNECT_ATTEMPTS = 10;
   const BASE_RECONNECT_DELAY = 1000; // 1 second base
   const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
+  const CONNECTION_READY_TIMEOUT = 8000; // Give login/public RPCs time to catch the initial WS handshake.
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   let intentionalDisconnect = false; // Flag to prevent auto-reconnect after logout
   let lastWsUrl: string | null = null; // Track URL for reconnection
   let isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+
+  function isAuthExpiredError(message: string): boolean {
+    const normalized = (message || "").toLowerCase();
+    return (
+      normalized.includes("unauthenticated") ||
+      normalized.includes("authentication required") ||
+      normalized.includes("invalid session") ||
+      normalized.includes("session expired") ||
+      normalized.includes("expired session") ||
+      normalized.includes("missing session") ||
+      normalized.includes("no valid session")
+    );
+  }
+
+  function notifySessionExpired(message: string) {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("wantastic:session-expired", {
+        detail: { message: message || "Session expired" },
+      })
+    );
+  }
 
   // Listen for online/offline events to manage reconnection
   if (typeof window !== "undefined") {
@@ -197,6 +228,7 @@ function createWebSocketStore() {
       resolve: (value: any) => void;
       reject: (error: Error) => void;
       timeout: NodeJS.Timeout;
+      suppressAuthExpiredEvent?: boolean;
     }
   >();
 
@@ -454,11 +486,21 @@ function createWebSocketStore() {
   let encryptionReadyReject: ((e: Error) => void) | null = null;
   let encryptionReadyPromise: Promise<void> = Promise.resolve(); // resolved by default (no-op until first connect)
 
+  function markHandled<T>(promise: Promise<T>): Promise<T> {
+    // Some callers intentionally fire-and-forget refresh/login RPCs. Keep the
+    // promise semantics intact for awaiters, but prevent browser-level
+    // "Uncaught (in promise)" noise when a socket closes underneath them.
+    promise.catch(() => {});
+    return promise;
+  }
+
   function resetEncryptionReady() {
-    encryptionReadyPromise = new Promise<void>((resolve, reject) => {
-      encryptionReadyResolve = resolve;
-      encryptionReadyReject = reject;
-    });
+    encryptionReadyPromise = markHandled(
+      new Promise<void>((resolve, reject) => {
+        encryptionReadyResolve = resolve;
+        encryptionReadyReject = reject;
+      })
+    );
   }
 
   function resolveEncryptionReady() {
@@ -494,7 +536,60 @@ function createWebSocketStore() {
     encryptionReadyResolve = null;
     encryptionReadyReject = null;
     // Replace with an already-rejected promise so future awaits fail fast.
-    encryptionReadyPromise = Promise.reject(new Error(reason));
+    encryptionReadyPromise = markHandled(Promise.reject(new Error(reason)));
+  }
+
+  function waitForSocketOpen(timeoutMs = CONNECTION_READY_TIMEOUT): Promise<void> {
+    if (ws?.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+
+    if ((!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) && lastWsUrl) {
+      reconnectAttempts = 0;
+      intentionalDisconnect = false;
+      connect(lastWsUrl);
+    }
+
+    if (ws?.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+    if (!ws || ws.readyState !== WebSocket.CONNECTING) {
+      return Promise.reject(new ApiError("WS_ERROR", 503, "WebSocket not connected"));
+    }
+
+    const socket = ws;
+    return markHandled(
+      new Promise<void>((resolve, reject) => {
+        let timeout: ReturnType<typeof setTimeout> | null = null;
+
+        const cleanup = () => {
+          if (timeout) clearTimeout(timeout);
+          socket.removeEventListener("open", onOpen);
+          socket.removeEventListener("close", onClose);
+          socket.removeEventListener("error", onError);
+        };
+        const onOpen = () => {
+          cleanup();
+          resolve();
+        };
+        const onClose = () => {
+          cleanup();
+          reject(new ApiError("WS_ERROR", 503, "WebSocket disconnected"));
+        };
+        const onError = () => {
+          cleanup();
+          reject(new ApiError("WS_ERROR", 503, "WebSocket connection failed"));
+        };
+
+        timeout = setTimeout(() => {
+          cleanup();
+          reject(new ApiError("WS_ERROR", 503, "WebSocket connection timed out"));
+        }, timeoutMs);
+        socket.addEventListener("open", onOpen, { once: true });
+        socket.addEventListener("close", onClose, { once: true });
+        socket.addEventListener("error", onError, { once: true });
+      })
+    );
   }
 
   /**
@@ -546,14 +641,11 @@ function createWebSocketStore() {
       return;
     }
 
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      return; // Already connected
-    }
-
-    // Close existing connection if in connecting state (prevents duplicate connections)
-    if (ws && ws.readyState === WebSocket.CONNECTING) {
-      ws.close();
-      ws = null;
+    if (
+      ws &&
+      (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return; // Already connected or handshaking
     }
 
     // Reset intentional disconnect flag when connecting
@@ -724,6 +816,12 @@ function createWebSocketStore() {
                 pending.resolve(data.response);
               } else {
                 // console.error(`❌ gRPC error: ${data.id}`, data.error);
+                if (
+                  isAuthExpiredError(data.error || "") &&
+                  !pending.suppressAuthExpiredEvent
+                ) {
+                  notifySessionExpired(data.error || "Session expired");
+                }
                 pending.reject(
                   new ApiError(
                     "RPC_ERROR",
@@ -759,18 +857,6 @@ function createWebSocketStore() {
                 streamRequests.delete(data.id);
               }
             }
-            return;
-          }
-
-          // Route WebProxy messages to registered listeners
-          if (
-            data.type === "http_response" ||
-            data.type === "http_error" ||
-            data.type === "ws_open" ||
-            data.type === "ws_frame" ||
-            data.type === "ws_close"
-          ) {
-            webProxyListeners.forEach((cb) => cb(data));
             return;
           }
 
@@ -1117,9 +1203,17 @@ function createWebSocketStore() {
   async function callGRPC<T>(
     service: string,
     method: string,
-    request: any = {}
+    request: any = {},
+    options: CallGRPCOptions = {}
   ): Promise<T> {
-    return new Promise(async (resolve, reject) => {
+    const promise = new Promise<T>(async (resolve, reject) => {
+      try {
+        await waitForSocketOpen(Math.min(REQUEST_TIMEOUT, CONNECTION_READY_TIMEOUT));
+      } catch (err) {
+        reject(err instanceof Error ? err : new ApiError("WS_ERROR", 503, "WebSocket not connected"));
+        return;
+      }
+
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         reject(new ApiError("WS_ERROR", 503, "WebSocket not connected"));
         return;
@@ -1141,6 +1235,7 @@ function createWebSocketStore() {
         resolve,
         reject,
         timeout,
+        suppressAuthExpiredEvent: options.suppressAuthExpiredEvent,
       });
 
       try {
@@ -1181,6 +1276,7 @@ function createWebSocketStore() {
         );
       }
     });
+    return markHandled(promise);
   }
 
   /**

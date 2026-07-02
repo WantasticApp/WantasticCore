@@ -5,7 +5,7 @@
   import { openedApps } from "$store/store";
   import { translateError$, _ } from "$store/i18n";
   import { onMount } from "svelte";
-  import { Button, TextBox, ComboBox } from "fluent-svelte";
+  import { Button, TextBox } from "fluent-svelte";
 
   // Form state
   let selectedPeerId = peerStore.getSelectedPeer()?.id || "";
@@ -33,6 +33,7 @@
   let error = "";
   let portError = "";
   let isLoadingPeers = true;
+  let peerSearch = "";
 
   // Strip any non-digit characters from the port input, then clamp to 1-65535.
   // fluent-svelte TextBox does not enforce type="number" natively, so we do it
@@ -84,11 +85,10 @@
     return false;
   }
 
-  // Format peers for ComboBox — SSH-detected peers first
+  // Format peers for the inline searchable device picker.
   $: peerItems = peers
     .map((p) => {
       const sshDetected = hasSshDetected(p);
-      const status = sshDetected ? "🟢" : "⚪";
       const name = p.name || p.id;
       const ip = p.assigned_ip || p.ip_address || "No IP";
       const portInfo =
@@ -96,9 +96,13 @@
           ? ` - port ${p.scanned_ssh_port}`
           : "";
       return {
-        name: `${status} ${name} (${ip})${portInfo}`,
+        id: p.id,
+        name,
+        ip,
+        portInfo,
         value: p.id,
         _sshDetected: sshDetected,
+        _searchText: `${name} ${ip} ${p.id} ${portInfo}`.toLowerCase(),
       };
     })
     .sort((a, b) => {
@@ -107,6 +111,17 @@
       if (!a._sshDetected && b._sshDetected) return 1;
       return a.name.localeCompare(b.name);
     });
+
+  $: normalizedPeerSearch = peerSearch.trim().toLowerCase();
+  $: filteredPeerItems = normalizedPeerSearch
+    ? peerItems.filter((item) => item._searchText.includes(normalizedPeerSearch))
+    : peerItems;
+  $: selectedPeerItem = peerItems.find((item) => item.value === selectedPeerId);
+
+  function selectPeer(peerId: string) {
+    selectedPeerId = peerId;
+    error = "";
+  }
 
   onMount(async () => {
     isLoadingPeers = true;
@@ -285,16 +300,67 @@
             <span></span> No peers found. Add a peer first.
           </div>
         {:else}
-          <ComboBox
-            items={peerItems}
-            bind:value={selectedPeerId}
-            placeholder="-- Select Peer --"
-            class="w-full mt-1"
-          />
+          <div class="peer-picker">
+            <div class="peer-search-shell">
+              <svg
+                class="peer-search-icon"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                id="peer"
+                class="peer-search-input"
+                type="search"
+                bind:value={peerSearch}
+                placeholder="Search device name, IP, or ID"
+                autocomplete="off"
+              />
+            </div>
+
+            {#if selectedPeerItem}
+              <div class="selected-peer-summary" title={`${selectedPeerItem.name} (${selectedPeerItem.ip})`}>
+                <span class:online-dot={selectedPeerItem._sshDetected} class="status-dot" />
+                <span class="selected-peer-text">
+                  <strong>{selectedPeerItem.name}</strong>
+                  <small>{selectedPeerItem.ip}{selectedPeerItem.portInfo}</small>
+                </span>
+              </div>
+            {/if}
+
+            <div class="peer-option-list" role="listbox" aria-label="Peer devices">
+              {#if filteredPeerItems.length === 0}
+                <div class="peer-empty">No devices match “{peerSearch}”.</div>
+              {:else}
+                {#each filteredPeerItems as item (item.value)}
+                  <button
+                    type="button"
+                    class:selected={selectedPeerId === item.value}
+                    class="peer-option"
+                    role="option"
+                    aria-selected={selectedPeerId === item.value}
+                    title={`${item.name} (${item.ip})${item.portInfo}`}
+                    on:click={() => selectPeer(item.value)}
+                  >
+                    <span class:online-dot={item._sshDetected} class="status-dot" />
+                    <span class="peer-option-main">
+                      <span class="peer-name">{item.name}</span>
+                      <span class="peer-meta">{item.ip}{item.portInfo}</span>
+                    </span>
+                  </button>
+                {/each}
+              {/if}
+            </div>
+          </div>
         {/if}
-        <span class="help-text"
-          >🟢 = SSH detected, ⚪ = Not detected (may still work)</span
-        >
+        <span class="help-text">Green = SSH detected, gray = not detected but may still work</span>
       </div>
 
       {#if selectedPeerIp}
@@ -410,10 +476,13 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    min-width: 0;
   }
 
   .private-key-input {
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 140px;
     padding: 0.75rem;
     border-radius: 0.5rem;
@@ -432,7 +501,9 @@
     gap: 6px;
     flex: 1;
     min-height: 0;
+    min-width: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     overscroll-behavior: contain;
   }
 
@@ -450,12 +521,14 @@
     flex-direction: column;
     gap: 8px;
     flex: 1;
+    min-width: 0;
   }
 
   .form-row {
     display: flex;
     gap: 10px;
     padding-bottom:24px !important;
+    min-width: 0;
   }
 
   label {
@@ -468,6 +541,156 @@
     font-size: 12px;
     color: rgb(var(--clr) / 60%);
     font-style: italic;
+  }
+
+  .peer-picker {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .peer-search-shell {
+    position: relative;
+    min-width: 0;
+  }
+
+  .peer-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgb(var(--clr) / 48%);
+    pointer-events: none;
+  }
+
+  .peer-search-input {
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    box-sizing: border-box;
+    border: 1px solid rgb(var(--clr) / 14%);
+    border-radius: 6px;
+    background: rgb(var(--bg2));
+    color: rgb(var(--clr));
+    padding: 0 12px 0 36px;
+    font-size: 14px;
+    outline: none;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .peer-search-input:focus {
+    border-color: rgb(var(--clrPrm) / 70%);
+    background: rgb(var(--bg1));
+    box-shadow: inset 0 -1px 0 rgb(var(--clrPrm));
+  }
+
+  .peer-search-input::placeholder {
+    color: rgb(var(--clr) / 42%);
+  }
+
+  .selected-peer-summary {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid rgb(var(--clrPrm) / 24%);
+    border-radius: 6px;
+    background: rgb(var(--clrPrm) / 8%);
+  }
+
+  .selected-peer-text,
+  .peer-option-main {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .selected-peer-text strong,
+  .peer-name,
+  .selected-peer-text small,
+  .peer-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .selected-peer-text strong,
+  .peer-name {
+    color: rgb(var(--clr));
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .selected-peer-text small,
+  .peer-meta {
+    color: rgb(var(--clr) / 58%);
+    font-size: 12px;
+  }
+
+  .peer-option-list {
+    display: grid;
+    gap: 4px;
+    max-height: 212px;
+    min-height: 44px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px;
+    border: 1px solid rgb(var(--clr) / 10%);
+    border-radius: 6px;
+    background: rgb(var(--bg2) / 76%);
+    scrollbar-width: thin;
+  }
+
+  .peer-option {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    padding: 7px 9px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .peer-option:hover {
+    background: rgb(var(--clr) / 6%);
+  }
+
+  .peer-option.selected {
+    border-color: rgb(var(--clrPrm) / 32%);
+    background: rgb(var(--clrPrm) / 12%);
+  }
+
+  .status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: rgb(var(--clr) / 32%);
+    box-shadow: 0 0 0 2px rgb(var(--clr) / 8%);
+  }
+
+  .status-dot.online-dot {
+    background: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+  }
+
+  .peer-empty {
+    padding: 12px;
+    color: rgb(var(--clr) / 56%);
+    font-size: 13px;
+    text-align: center;
   }
 
   .loading-indicator {

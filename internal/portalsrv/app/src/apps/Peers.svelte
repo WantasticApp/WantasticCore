@@ -4,7 +4,8 @@
   import Titlebar from "$components/shared/Titlebar.svelte";
   import AppWindow from "$components/AppWindow.svelte";
   import PeerUptimeChart from "$components/PeerUptimeChart.svelte";
-  import { peerStore } from "$store/peer";
+  import { peerStore, type Peer } from "$store/peer";
+  import { teamStore, canInviteMore, type SharePermissions } from "$store/team";
   import { webProxyStore } from "$store/webproxy";
   import {
     openedApps,
@@ -16,7 +17,7 @@
   import MaterialSymbolsLightPulseAlert from "~icons/material-symbols-light/pulse-alert";
   import MaterialSymbolsLightSettings from "~icons/material-symbols-light/settings";
   import PeerSettings from "$components/PeerSettings.svelte";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { formatRelativeTime } from "$lib/dateUtils";
   import { toasts } from "$store/toast";
   import { translateError$, _ } from "$store/i18n";
@@ -37,10 +38,20 @@
   let selectedPeers = new Set<string>();
   let showSequenceRenameModal = false;
   let showMassTaggingModal = false;
+  let showSharePeersModal = false;
   let sequencePattern = "Device-###";
   let sequenceStart = 1;
   let massTagsInput = "";
   let massTagsMode: "add" | "remove" = "add";
+  let sharePeerIds: string[] = [];
+  let shareMode: "email" | "link" = "email";
+  let shareEmail = "";
+  let shareName = "";
+  let shareCanWrite = false;
+  let shareLoading = false;
+  let shareTeamLoading = false;
+  let shareInviteUrl = "";
+  let shareQrCode = "";
 
   // Confirmation Modal state
   let showConfirmModal = false;
@@ -105,12 +116,17 @@
 
   $: isMultiSelectActive = selectedPeers.size > 0;
   // allSelected logic now considers filtered set
+  $: visiblePeersForSelection = searchTerm ? filteredPeers : peers;
+  $: selectedVisibleCount = visiblePeersForSelection.filter((p) =>
+    selectedPeers.has(p.id),
+  ).length;
   $: allSelected =
-    (searchQuery ? filteredPeers.length : peers.length) > 0 &&
-    (searchQuery
-      ? filteredPeers.every((p) => selectedPeers.has(p.id))
-      : selectedPeers.size === peers.length);
-  $: selectedPeerItems = peers.filter((peer) => selectedPeers.has(peer.id));
+    visiblePeersForSelection.length > 0 &&
+    selectedVisibleCount === visiblePeersForSelection.length;
+  $: peersById = new Map(peers.map((peer) => [peer.id, peer]));
+  $: selectedPeerItems = Array.from(selectedPeers)
+    .map((id) => peersById.get(id))
+    .filter(Boolean) as Peer[];
   $: selectedHasSharedPeers = selectedPeerItems.some((peer) => peer.is_shared);
 
   function toggleSelection(peerId: string) {
@@ -127,7 +143,7 @@
       selectedPeers = new Set();
     } else {
       // Select only filtered peers if search is active
-      const peersToSelect = searchQuery ? filteredPeers : peers;
+      const peersToSelect = visiblePeersForSelection;
       selectedPeers = new Set(peersToSelect.map((p) => p.id));
     }
   }
@@ -202,6 +218,97 @@
     showMassTaggingModal = false;
   }
 
+  async function openSharePeers(peerIds: string[]) {
+    const ownedIds = peerIds.filter((id) => {
+      const peer = peers.find((p) => p.id === id);
+      return peer && !peer.is_shared;
+    });
+    if (ownedIds.length === 0) {
+      toasts.error("Select devices you own to share");
+      return;
+    }
+    sharePeerIds = ownedIds;
+    shareMode = "email";
+    shareEmail = "";
+    shareName = "";
+    shareCanWrite = false;
+    shareInviteUrl = "";
+    shareQrCode = "";
+    showSharePeersModal = true;
+    shareTeamLoading = true;
+    teamStore
+      .listTeammates()
+      .catch((err) => {
+        console.error("Failed to load teammate limits:", err);
+      })
+      .finally(() => {
+        shareTeamLoading = false;
+      });
+  }
+
+  function closeSharePeers() {
+    showSharePeersModal = false;
+    shareLoading = false;
+    shareTeamLoading = false;
+    shareInviteUrl = "";
+    shareQrCode = "";
+  }
+
+  function generatedShareTag() {
+    return `share-${Date.now().toString(36)}`;
+  }
+
+  async function submitSharePeers() {
+    if (shareLoading || sharePeerIds.length === 0) return;
+    if (shareMode === "email" && !shareEmail.trim()) return;
+
+    shareLoading = true;
+    shareInviteUrl = "";
+    shareQrCode = "";
+    const tag = generatedShareTag();
+    const permissions: SharePermissions = {
+      devices_read: true,
+      devices_write: shareCanWrite,
+    };
+
+    try {
+      await peerStore.batchUpdatePeers(sharePeerIds, 3, { tags: [tag] });
+      const result =
+        shareMode === "email"
+          ? await teamStore.inviteTeammate({
+              shared_email: shareEmail.trim(),
+              sharee_name: shareName.trim(),
+              permissions,
+              tag_filter: [tag],
+            })
+          : await teamStore.createLinkShare({
+              sharee_name: shareName.trim(),
+              permissions,
+              tag_filter: [tag],
+            });
+
+      if (!result.success) {
+        toasts.error(result.message ?? "Failed to create share");
+        return;
+      }
+
+      if (shareMode === "link") {
+        const linkResult = result as { invite_url?: string; qr_code?: string };
+        shareInviteUrl = linkResult.invite_url ?? "";
+        shareQrCode = linkResult.qr_code ?? "";
+        toasts.success(result.message ?? "Share link created");
+      } else {
+        toasts.success(result.message ?? "Invite sent");
+        closeSharePeers();
+      }
+      selectedPeers = new Set();
+    } catch (err: any) {
+      toasts.error(err?.message ?? "Failed to share selected devices");
+    } finally {
+      shareLoading = false;
+    }
+  }
+
   function applyMassTagging() {
     const tags = massTagsInput
       .split(",")
@@ -239,6 +346,8 @@
 
   // Search and filter
   let searchQuery = "";
+  let searchTerm = "";
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Expanded rows state
   let expandedRows: Record<string, boolean> = {};
@@ -268,10 +377,24 @@
   const PORT_SCAN_RESULT_MAX_WAIT_MS = 6000;
   $: peers = $peerStore.peers;
   $: isLoading = $peerStore.isLoading;
+  $: isRefreshing = $peerStore.isLoading;
   $: error = $peerStore.error;
+  $: onlinePeerCount = peers.reduce((count, peer) => count + (peer.is_online ? 1 : 0), 0);
+
+  $: {
+    if (searchTimer) clearTimeout(searchTimer);
+    const nextSearchTerm = searchQuery.trim().toLowerCase();
+    searchTimer = setTimeout(() => {
+      searchTerm = nextSearchTerm;
+    }, 120);
+  }
+
+  onDestroy(() => {
+    if (searchTimer) clearTimeout(searchTimer);
+  });
   // Initialize activePeersTabs for each peer (only add NEW peers, preserve existing state)
   $: {
-    for (const peer of peers) {
+    for (const peer of pagedPeers) {
       if (!activePeersTabs[peer.id]) {
         activePeersTabs[peer.id] = {
           pingTab: false,
@@ -284,13 +407,13 @@
   }
   // Filtered peers based on search
   $: filteredPeers = peers.filter((peer) => {
-    if (!searchQuery) return true;
+    if (!searchTerm) return true;
     return (
-      peer.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      peer.assigned_ip?.includes(searchQuery) ||
-      peer.public_key?.includes(searchQuery) ||
+      peer.name?.toLowerCase().includes(searchTerm) ||
+      peer.assigned_ip?.toLowerCase().includes(searchTerm) ||
+      peer.public_key?.toLowerCase().includes(searchTerm) ||
       peer.tags?.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.toLowerCase()),
+        tag.toLowerCase().includes(searchTerm),
       )
     );
   });
@@ -364,11 +487,12 @@
   });
 
   function handleAddPeer() {
-    if (!$openedApps.includes("AddPeer")) {
-      $openedApps = [...$openedApps, "AddPeer"];
+    void import("$apps/OnboardingGuide.svelte");
+    if (!$openedApps.includes("OnboardingGuide")) {
+      $openedApps = [...$openedApps, "OnboardingGuide"];
     }
-    $activeThing = "AddPeer";
-    bringToFront("AddPeer");
+    $activeThing = "OnboardingGuide";
+    bringToFront("OnboardingGuide");
   }
 
   async function handleRemovePeer(peerId: string, peerName: string) {
@@ -1072,6 +1196,31 @@
 
             {#if !selectedHasSharedPeers}
               <IconButton
+                class="action-btn"
+                on:click={() => openSharePeers(Array.from(selectedPeers))}
+                title="Share selected devices"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="1em"
+                  height="1em"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <path d="M8.6 10.5 15.4 6.5M8.6 13.5l6.8 4" />
+                </svg>
+              </IconButton>
+            {/if}
+
+            {#if !selectedHasSharedPeers}
+              <IconButton
                 class="action-btn delete"
                 on:click={handleBulkDelete}
                 title={$_("peers.deleteSelected")}
@@ -1151,6 +1300,8 @@
             </button>
             <button
               class="icon-btn refresh"
+              class:spinning={isRefreshing}
+              disabled={isRefreshing}
               on:click={() => {
                 peerStore.refresh();
               }}
@@ -1189,7 +1340,7 @@
         </div>
       {/if} -->
 
-      {#if isLoading}
+      {#if isLoading && peers.length === 0}
         <div class="loading-state">
           <p>Loading devices...</p>
         </div>
@@ -1432,7 +1583,7 @@
                         </svg>
                       </button>
                       {/if}
-                      {#if peer.routeros_candidate || peer.routeros_api_ready}
+                      {#if peer.routeros_api_ready}
                       <button
                         class="action-btn"
                         class:active={$openedApps.includes("RouterOSDashboard") &&
@@ -1510,6 +1661,30 @@
                         </svg>
                       </button>
                       {#if !peer.is_shared}
+                      <button
+                        class="action-btn"
+                        on:click={(e) => {
+                          e.stopPropagation();
+                          openSharePeers([peer.id]);
+                        }}
+                        title="Share device"
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <circle cx="18" cy="5" r="3" />
+                          <circle cx="6" cy="12" r="3" />
+                          <circle cx="18" cy="19" r="3" />
+                          <path d="M8.6 10.5 15.4 6.5M8.6 13.5l6.8 4" />
+                        </svg>
+                      </button>
                       <button
                         class="action-btn"
                         class:active={peer.notification_enabled}
@@ -2334,7 +2509,7 @@
                         </svg>
                       </button>
                     {/if}
-                    {#if peer.routeros_candidate || peer.routeros_api_ready}
+                    {#if peer.routeros_api_ready}
                       <button
                         class="action-btn"
                         class:active={$openedApps.includes("RouterOSDashboard") &&
@@ -2409,6 +2584,27 @@
                       </svg>
                     </button>
                     {#if !peer.is_shared}
+                    <button
+                      class="action-btn"
+                      on:click={() => openSharePeers([peer.id])}
+                      title="Share device"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <circle cx="18" cy="5" r="3" />
+                        <circle cx="6" cy="12" r="3" />
+                        <circle cx="18" cy="19" r="3" />
+                        <path d="M8.6 10.5 15.4 6.5M8.6 13.5l6.8 4" />
+                      </svg>
+                    </button>
                     <button
                       class="action-btn"
                       class:active={peer.notification_enabled}
@@ -2648,8 +2844,11 @@
 
     <div class="status-bar">
       <span>{peers.length} device{peers.length !== 1 ? "s" : ""}</span>
-      <span>{peers.filter((p) => p.is_online).length} online</span>
-      {#if searchQuery}
+      <span>{onlinePeerCount} online</span>
+      {#if isRefreshing}
+        <span>refreshing...</span>
+      {/if}
+      {#if searchTerm}
         <span>{filteredPeers.length} filtered</span>
       {/if}
 
@@ -2815,6 +3014,144 @@
               {massTagsMode === "add"
                 ? $_("peers.addTags")
                 : $_("peers.removeTags")}
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if showSharePeersModal}
+      <div class="modal-overlay" transition:scale={{ duration: 150 }}>
+        <div
+          class="modal share-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="share-devices-title"
+        >
+          <div class="modal-header share-header">
+            <div>
+              <h3 id="share-devices-title">Share devices</h3>
+              <p>{sharePeerIds.length} selected device{sharePeerIds.length === 1 ? "" : "s"}</p>
+            </div>
+            <button class="close-btn share-close" type="button" aria-label="Close share dialog" on:click={closeSharePeers}>
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+          <div class="modal-body share-modal-body">
+            <div class="share-summary">
+              <strong>{sharePeerIds.length}</strong>
+              <span>selected device{sharePeerIds.length === 1 ? "" : "s"} will be shared.</span>
+            </div>
+
+            {#if shareTeamLoading}
+              <div class="share-warning neutral">
+                Checking team capacity...
+              </div>
+            {:else if !$canInviteMore}
+              <div class="share-warning">
+                Your team limit is reached. Ask admin to raise or remove the teammate limit.
+              </div>
+            {/if}
+
+            <div class="share-mode-row">
+              <button
+                type="button"
+                class:active={shareMode === "email"}
+                on:click={() => (shareMode = "email")}
+              >
+                Email invite
+              </button>
+              <button
+                type="button"
+                class:active={shareMode === "link"}
+                on:click={() => (shareMode = "link")}
+              >
+                Link / QR
+              </button>
+            </div>
+
+            {#if shareMode === "email"}
+              <div class="form-group">
+                <label for="share-email">Email</label>
+                <div class="share-input-shell">
+                  <input
+                    id="share-email"
+                    type="email"
+                    bind:value={shareEmail}
+                    placeholder="colleague@example.com"
+                  />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="share-name">Name (optional)</label>
+                <div class="share-input-shell">
+                  <input
+                    id="share-name"
+                    type="text"
+                    bind:value={shareName}
+                    placeholder="Jane Doe"
+                  />
+                </div>
+              </div>
+            {:else}
+              <div class="share-warning neutral">
+                Anyone with the generated link can accept this share.
+              </div>
+              <div class="form-group">
+                <label for="share-label">Label (optional)</label>
+                <div class="share-input-shell">
+                  <input
+                    id="share-label"
+                    type="text"
+                    bind:value={shareName}
+                    placeholder="Install crew"
+                  />
+                </div>
+              </div>
+            {/if}
+
+            <label class="share-write-toggle">
+              <input type="checkbox" bind:checked={shareCanWrite} />
+              <span>Allow teammate to manage these devices</span>
+            </label>
+
+            {#if shareInviteUrl}
+              <div class="share-result">
+                {#if shareQrCode}
+                  <img
+                    src="data:image/png;base64,{shareQrCode}"
+                    alt="Share QR"
+                    width="160"
+                    height="160"
+                  />
+                {/if}
+                <div class="share-link-row">
+                  <div class="share-input-shell">
+                    <input readonly value={shareInviteUrl} />
+                  </div>
+                  <button
+                    type="button"
+                    on:click={() => {
+                      navigator.clipboard.writeText(shareInviteUrl).then(() => toasts.success("Link copied"));
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </div>
+          <div class="modal-actions share-actions">
+            <button class="btn-secondary px-4" type="button" on:click={closeSharePeers}>
+              {$_("common.cancel")}
+            </button>
+            <button
+              class="btn-primary"
+              type="button"
+              disabled={shareLoading || shareTeamLoading || !$canInviteMore || (shareMode === "email" && !shareEmail.trim())}
+              on:click={submitSharePeers}
+            >
+              {shareLoading ? "Sharing..." : shareMode === "email" ? "Send invite" : "Generate link"}
             </button>
           </div>
         </div>
@@ -5188,13 +5525,23 @@
 
   .status-bar {
     display: flex;
-    gap: 16px;
+    gap: 12px 16px;
+    /* flex-wrap is the key fix: on narrow viewports the pager used to
+       overflow past the right edge (and on mobile, below the bottom of
+       the AppWindow, which leaves it visually hidden under the taskbar
+       since AppWindow already reserves height: calc(100dvh - 48px)).
+       Wrapping lets the pager drop onto a new row instead. */
+    flex-wrap: wrap;
     padding: 8px 24px;
     background: rgb(var(--bg2));
     border-top: 1px solid rgb(var(--clr) / 10%);
     font-size: 12px;
     color: rgb(var(--clr) / 80%);
     align-items: center;
+    /* flex: 0 0 auto on the row keeps it from being squeezed by the
+       scrollable peers list above; the row is always at least one line
+       of text high and never collapses to 0 when the list is tall. */
+    flex: 0 0 auto;
   }
 
   /* Pagination strip — pushed to the right edge of the status bar.
@@ -5254,8 +5601,36 @@
     font-variant-numeric: tabular-nums;
   }
   @media (max-width: 600px) {
+    .status-bar {
+      /* Tighter padding so the bar fits within one row when possible,
+         and an explicit small row-gap so wrapped pager rows aren't
+         crushed against the count text. */
+      padding: 6px 12px;
+      gap: 6px 10px;
+      font-size: 11px;
+    }
+    .pager {
+      /* Drop margin-left:auto so the pager flows next to the counts when
+         there's room, and onto a new row when there isn't — instead of
+         being pushed off-screen to the right. */
+      margin-left: 0;
+      gap: 4px;
+    }
     .pager-size span {
       display: none;
+    }
+    .pager-size select {
+      padding: 1px 4px;
+      font-size: 11px;
+    }
+    .pager-btn {
+      width: 20px;
+      height: 20px;
+      font-size: 13px;
+    }
+    .pager-label {
+      min-width: 32px;
+      font-size: 11px;
     }
   }
 
@@ -6094,5 +6469,272 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .share-modal {
+    width: min(560px, calc(100vw - 32px));
+    max-height: min(760px, calc(100vh - 48px));
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    border-radius: 8px;
+    background: rgb(var(--bg1));
+    box-shadow:
+      0 32px 64px rgb(0 0 0 / 34%),
+      0 0 0 1px rgb(255 255 255 / 7%);
+  }
+
+  .share-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    background: rgb(var(--bg2));
+    border-bottom: 1px solid rgb(var(--clr) / 8%);
+  }
+
+  .share-header h3 {
+    font-size: 18px;
+    line-height: 1.25;
+  }
+
+  .share-header p {
+    margin: 4px 0 0;
+    color: rgb(var(--clr) / 58%);
+    font-size: 12px;
+  }
+
+  .share-close {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: rgb(var(--clr) / 72%);
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .share-close:hover {
+    border-color: rgb(var(--clr) / 12%);
+    background: rgb(var(--clr) / 7%);
+    color: rgb(var(--clr));
+  }
+
+  .share-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px;
+    gap: 16px;
+    scrollbar-width: thin;
+  }
+
+  .share-actions {
+    position: sticky;
+    bottom: 0;
+    padding: 14px 20px;
+    border-top: 1px solid rgb(var(--clr) / 8%);
+    background: rgb(var(--bg2));
+  }
+
+  .share-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid rgb(var(--clrPrm) / 24%);
+    border-radius: 6px;
+    background: rgb(var(--clrPrm) / 9%);
+    color: rgb(var(--clr) / 86%);
+    font-size: 13px;
+  }
+
+  .share-summary strong {
+    color: rgb(var(--clrPrm));
+    font-size: 18px;
+  }
+
+  .share-warning {
+    padding: 11px 12px;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .share-warning.neutral {
+    border-color: rgb(var(--clr) / 10%);
+    background: rgb(var(--clr) / 5%);
+    color: rgb(var(--clr) / 62%);
+  }
+
+  .share-mode-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 6px;
+    background: rgb(var(--bg2));
+    border: 1px solid rgb(var(--clr) / 8%);
+  }
+
+  .share-mode-row button {
+    min-height: 36px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: rgb(var(--clr) / 62%);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .share-mode-row button.active {
+    background: rgb(var(--clrPrm));
+    color: white;
+  }
+
+  .share-modal .form-group {
+    margin: 0;
+  }
+
+  .share-modal .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: rgb(var(--clr) / 66%);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .share-input-shell {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .share-input-shell input {
+    width: 100%;
+    min-height: 36px;
+    border: 1px solid rgb(var(--clr) / 16%);
+    border-radius: 4px;
+    background: rgb(var(--bg2));
+    color: rgb(var(--clr));
+    padding: 0 11px;
+    outline: none;
+    box-sizing: border-box;
+    font-size: 13px;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      background 0.15s ease;
+  }
+
+  .share-input-shell input::placeholder {
+    color: rgb(var(--clr) / 42%);
+  }
+
+  .share-input-shell input:focus {
+    border-color: rgb(var(--clrPrm) / 76%);
+    background: rgb(var(--bg1));
+    box-shadow: inset 0 -1px 0 rgb(var(--clrPrm));
+  }
+
+  .share-write-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: rgb(var(--clr) / 76%);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .share-write-toggle input {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    accent-color: rgb(var(--clrPrm));
+  }
+
+  .share-result {
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+    padding: 12px;
+    border: 1px solid rgb(var(--clr) / 10%);
+    border-radius: 6px;
+    background: rgb(var(--bg2));
+  }
+
+  .share-result img {
+    border-radius: 6px;
+    background: white;
+    padding: 8px;
+  }
+
+  .share-link-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .share-link-row button {
+    min-width: 64px;
+    border: 1px solid rgb(var(--clrPrm) / 30%);
+    border-radius: 6px;
+    background: rgb(var(--clrPrm) / 14%);
+    color: rgb(var(--clrPrm));
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .share-actions .btn-primary,
+  .share-actions .btn-secondary {
+    min-height: 36px;
+    border-radius: 4px;
+    padding: 0 18px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .share-actions .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  @media (max-width: 560px) {
+    .share-modal {
+      width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+    }
+
+    .share-header,
+    .share-modal-body,
+    .share-actions {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .share-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .share-actions .btn-primary,
+    .share-actions .btn-secondary {
+      width: 100%;
+    }
   }
 </style>

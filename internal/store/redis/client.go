@@ -18,10 +18,21 @@ func NewClient(cfg config.RedisConfig) (*redis.Client, error) {
 	}
 
 	opts := &redis.Options{
-		Addr:     cfg.Addr,
-		Username: cfg.Username,
-		Password: cfg.Password,
-		DB:       cfg.DB,
+		Addr:            cfg.Addr,
+		Username:        cfg.Username,
+		Password:        cfg.Password,
+		DB:              cfg.DB,
+		ClientName:      "wantastic",
+		MaxRetries:      8,
+		MinRetryBackoff: 100 * time.Millisecond,
+		MaxRetryBackoff: 2 * time.Second,
+		DialTimeout:     5 * time.Second,
+		ReadTimeout:     3 * time.Second,
+		WriteTimeout:    3 * time.Second,
+		PoolSize:        50,
+		MinIdleConns:    4,
+		ConnMaxIdleTime: 5 * time.Minute,
+		PoolTimeout:     5 * time.Second,
 	}
 
 	client := redis.NewClient(opts)

@@ -30,6 +30,7 @@ type ServerBackend interface {
 
 	// Peer management
 	AddPeer(accountID, peerName string, assignedIP string) (*server.PeerInfo, error)
+	AddPeerWithKey(accountID, peerName, assignedIP, publicKey string) (*server.PeerInfo, error)
 	RemovePeer(accountID string, publicKey string) error
 	UpdatePeer(peer *server.PeerMetadata) error
 	GetPeer(accountID, peerID string) (*server.PeerMetadata, error)
@@ -45,6 +46,7 @@ type ServerBackend interface {
 	GetActiveScanID(accountID, peerID string) string
 	IsScanInProgress(accountID, peerID string) bool
 	GetTenantDevice(accountID string) (*userspace.TenantDevice, error)
+	GetServerPublicKey(accountID string) string
 
 	// ACL
 	GetACLRules(accountID string) []*server.ACLRule

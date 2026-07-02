@@ -173,6 +173,61 @@ function getNestedValue(obj: any, path: string): string | undefined {
   return typeof result === "string" ? result : undefined;
 }
 
+const missingTranslationWarnings = new Set<string>();
+
+function warnMissingTranslation(lang: LanguageCode, key: string, fallback?: string) {
+  if (!import.meta.env?.DEV) return;
+
+  const warningKey = `${lang}:${key}:${fallback || ""}`;
+  if (missingTranslationWarnings.has(warningKey)) return;
+  missingTranslationWarnings.add(warningKey);
+
+  const suffix = fallback ? `; using fallback "${fallback}"` : "";
+  console.warn(`[i18n] Missing translation "${key}" for "${lang}"${suffix}`);
+}
+
+function getLeafFallback(translations: Translations, key: string): string | undefined {
+  if (!key.includes(".")) return undefined;
+  const leaf = key.split(".").pop();
+  return leaf ? getNestedValue(translations, leaf) : undefined;
+}
+
+function resolveTranslation(
+  key: string,
+  lang: LanguageCode,
+  allTranslations: Record<LanguageCode, Translations>
+): string | undefined {
+  const langTranslations = allTranslations[lang] || {};
+  const exact = getNestedValue(langTranslations, key);
+  if (exact !== undefined) return exact;
+
+  const enTranslations = allTranslations.en || {};
+  if (lang !== "en") {
+    const englishExact = getNestedValue(enTranslations, key);
+    if (englishExact !== undefined) {
+      warnMissingTranslation(lang, key, "en");
+      return englishExact;
+    }
+  }
+
+  const langLeaf = getLeafFallback(langTranslations, key);
+  if (langLeaf !== undefined) {
+    warnMissingTranslation(lang, key, key.split(".").pop());
+    return langLeaf;
+  }
+
+  if (lang !== "en") {
+    const englishLeaf = getLeafFallback(enTranslations, key);
+    if (englishLeaf !== undefined) {
+      warnMissingTranslation(lang, key, `en.${key.split(".").pop()}`);
+      return englishLeaf;
+    }
+  }
+
+  warnMissingTranslation(lang, key);
+  return undefined;
+}
+
 // Helper to extract interpolation params
 function extractParams(
   params?: TranslationParams
@@ -188,16 +243,7 @@ function extractParams(
 export function t(key: string, params?: TranslationParams): string {
   const lang = get(currentLanguage);
   const allTranslations = get(translations);
-  const langTranslations = allTranslations[lang] || {};
-
-  // Try to get translation for current language
-  let text = getNestedValue(langTranslations, key);
-
-  // Fallback to English if not found
-  if (text === undefined && lang !== "en") {
-    const enTranslations = allTranslations.en || {};
-    text = getNestedValue(enTranslations, key);
-  }
+  let text = resolveTranslation(key, lang, allTranslations);
 
   // Return key if no translation found
   if (text === undefined) {
@@ -220,16 +266,7 @@ export const _ = derived(
   [currentLanguage, translations],
   ([$lang, $translations]) => {
     return (key: string, params?: TranslationParams): string => {
-      const langTranslations = $translations[$lang] || {};
-
-      // Try to get translation for current language
-      let text = getNestedValue(langTranslations, key);
-
-      // Fallback to English if not found
-      if (text === undefined && $lang !== "en") {
-        const enTranslations = $translations.en || {};
-        text = getNestedValue(enTranslations, key);
-      }
+      let text = resolveTranslation(key, $lang, $translations);
 
       // Return key if no translation found
       if (text === undefined) {

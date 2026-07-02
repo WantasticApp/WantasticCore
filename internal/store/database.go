@@ -30,8 +30,8 @@ type Database struct {
 	groups          GroupRepository
 	acl             ACLRepository
 	ipam            IPAMRepository
-	wuspDeviceState  WUSPDeviceStateRepository
-	deviceSnapshots  DeviceSnapshotRepository
+	wuspDeviceState WUSPDeviceStateRepository
+	deviceSnapshots DeviceSnapshotRepository
 
 	mu sync.RWMutex
 }
@@ -131,9 +131,20 @@ func newDatabase(cfg Config) (*Database, error) {
 	// Connect to Redis if enabled
 	if cfg.RedisEnabled && cfg.RedisAddr != "" {
 		redisClient := redis.NewClient(&redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-			DB:       cfg.RedisDB,
+			Addr:            cfg.RedisAddr,
+			Password:        cfg.RedisPassword,
+			DB:              cfg.RedisDB,
+			ClientName:      "wantastic-store",
+			MaxRetries:      8,
+			MinRetryBackoff: 100 * time.Millisecond,
+			MaxRetryBackoff: 2 * time.Second,
+			DialTimeout:     5 * time.Second,
+			ReadTimeout:     3 * time.Second,
+			WriteTimeout:    3 * time.Second,
+			PoolSize:        50,
+			MinIdleConns:    4,
+			ConnMaxIdleTime: 5 * time.Minute,
+			PoolTimeout:     5 * time.Second,
 		})
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -277,13 +288,13 @@ func (d *Database) WUSPDeviceStates() WUSPDeviceStateRepository {
 
 // These will be implemented in internal/store/postgres/
 var (
-	newAccountRepository             func(*pg.DB) AccountRepository
-	newTenantRepository              func(*pg.DB) TenantRepository
-	newSessionRepository             func(*pg.DB) SessionRepository
-	newPeerRepository                func(*pg.DB) PeerRepository
-	newGroupRepository               func(*pg.DB) GroupRepository
-	newACLRepository                 func(*pg.DB) ACLRepository
-	newIPAMRepository                func(*pg.DB) IPAMRepository
+	newAccountRepository         func(*pg.DB) AccountRepository
+	newTenantRepository          func(*pg.DB) TenantRepository
+	newSessionRepository         func(*pg.DB) SessionRepository
+	newPeerRepository            func(*pg.DB) PeerRepository
+	newGroupRepository           func(*pg.DB) GroupRepository
+	newACLRepository             func(*pg.DB) ACLRepository
+	newIPAMRepository            func(*pg.DB) IPAMRepository
 	newWUSPDeviceStateRepository func(*pg.DB) WUSPDeviceStateRepository
 	newDeviceSnapshotRepository  func(*pg.DB) DeviceSnapshotRepository
 	newCachedSessionRepository   func(SessionRepository, *redis.Client) SessionRepository

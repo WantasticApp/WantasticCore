@@ -507,9 +507,15 @@ function createPeerStore() {
 
   async function addPeer(
     name: string,
-    assignedIp?: string,
+    assignedIpOrOptions?: string | { publicKey?: string },
     allowedIps?: string[]
   ) {
+    const options =
+      typeof assignedIpOrOptions === "object" && assignedIpOrOptions !== null
+        ? assignedIpOrOptions
+        : {};
+    const assignedIp =
+      typeof assignedIpOrOptions === "string" ? assignedIpOrOptions : "";
     update((s) => ({ ...s, isLoading: true, error: null }));
     try {
       const response = await wsStore.callGRPC<{
@@ -523,6 +529,7 @@ function createPeerStore() {
           tenant_id: "",
           assigned_ip: assignedIp || "",
           allowed_ips: allowedIps || [],
+          public_key: options.publicKey || "",
         }
       );
       const peer = {

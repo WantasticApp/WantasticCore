@@ -25,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	proto "WantasticCore/internal/types"
 	"WantasticCore/internal/account"
 	"WantasticCore/internal/auth"
 	"WantasticCore/internal/config"
@@ -34,6 +33,7 @@ import (
 	rosapi "WantasticCore/internal/routerosapi"
 	"WantasticCore/internal/server"
 	"WantasticCore/internal/tenant"
+	proto "WantasticCore/internal/types"
 	webssh "WantasticCore/internal/webssh"
 	"WantasticCore/internal/wg/userspace"
 
@@ -200,7 +200,6 @@ type TenantPortalServiceServer struct {
 
 	mu sync.RWMutex
 }
-
 
 // serverPeerCreator adapts server.Server
 type serverPeerCreator struct {
@@ -1826,7 +1825,6 @@ func (s *TenantBillingServiceServer) ContactSales(ctx context.Context, req *prot
 	return nil, errs.UnimplementedE("billing removed")
 }
 
-
 // =============================================================================
 // Tenant Data Service
 // =============================================================================
@@ -3140,12 +3138,36 @@ func (s *TenantPortalServiceServer) AddTenantPeer(ctx context.Context, req *prot
 		resourceTenantID = usedScope.TenantID
 	}
 
-	// Delegate to server.AddPeer — this is the single authoritative place for:
+	// Delegate to the server layer — this is the single authoritative place for:
 	//   • effective peer limit enforcement (admin override first, otherwise plan default)
 	//   • IP assignment (atomic, no duplicate IPs possible)
 	//   • WireGuard registration + DB persistence (with rollback on failure)
 	// Pass "" for IP so the server assigns the next available address under its lock.
-	peerInfo, err := s.server.AddPeer(overlayAccountID, req.Name, "")
+	claimPublicKey := strings.TrimSpace(req.PublicKey)
+	var peerInfo *server.PeerInfo
+	var existingClaimPeer *server.PeerMetadata
+	if claimPublicKey != "" {
+		if existing, findErr := s.server.FindPeer(claimPublicKey); findErr == nil && existing != nil {
+			if existing.AccountID != overlayAccountID {
+				return nil, errs.AlreadyExistsE("this Wantastic device has already been claimed")
+			}
+			existingClaimPeer = existing
+			peerInfo = &server.PeerInfo{
+				Name:            existing.Name,
+				PublicKey:       existing.WireGuardPublicKey,
+				AllowedIPs:      existing.AllowedIPs,
+				ServerPublicKey: s.server.GetServerPublicKey(overlayAccountID),
+				ServerEndpoint:  s.server.GetServerEndpoint(),
+			}
+			if peerInfo.PublicKey == "" {
+				peerInfo.PublicKey = existing.ID
+			}
+		} else {
+			peerInfo, err = s.server.AddPeerWithKey(overlayAccountID, req.Name, "", claimPublicKey)
+		}
+	} else {
+		peerInfo, err = s.server.AddPeer(overlayAccountID, req.Name, "")
+	}
 	if err != nil {
 		log.Error().Err(err).
 			Str("tenant_id", req.TenantId).
@@ -3160,12 +3182,54 @@ func (s *TenantPortalServiceServer) AddTenantPeer(ctx context.Context, req *prot
 		return nil, errs.Internalf("failed to add peer: %v", err)
 	}
 
+	if claimPublicKey != "" && existingClaimPeer == nil {
+		if peer, markErr := s.server.GetPeer(overlayAccountID, peerInfo.PublicKey); markErr == nil && peer != nil {
+			peer.ClientType = "wantasticd"
+			peer.IsWantasticd = true
+			peer.PrivateKey = ""
+			peer.WireGuardPrivateKey = ""
+			if peer.CachedPortScanJSON == nil {
+				claimMeta := map[string]interface{}{
+					"fingerprint": map[string]interface{}{
+						"vendor":      "Wantastic",
+						"device_type": "Wantastic Agent",
+					},
+					"claimed_from_public_key_qr": true,
+					"claimed_at":                 time.Now().UTC().Format(time.RFC3339),
+				}
+				if claimBytes, marshalErr := json.Marshal(claimMeta); marshalErr == nil {
+					peer.CachedPortScanJSON = claimBytes
+				}
+			}
+			if updateErr := s.server.UpdatePeer(peer); updateErr != nil {
+				log.Warn().Err(updateErr).
+					Str("tenant_id", req.TenantId).
+					Str("peer_id", peerInfo.PublicKey).
+					Msg("Failed to mark claimed peer as wantasticd")
+			}
+		} else {
+			log.Warn().Err(markErr).
+				Str("tenant_id", req.TenantId).
+				Str("peer_id", peerInfo.PublicKey).
+				Msg("Failed to load claimed peer for wantasticd metadata")
+		}
+	}
+
 	// The server already embedded /32 in AllowedIPs; strip it for the address field.
 	peerIP := strings.TrimSuffix(peerInfo.AllowedIPs[0], "/32")
 
 	message := "Peer created successfully"
-	wgConfig, err := s.server.GetPeerConfig(overlayAccountID, peerInfo.PublicKey, s.wireguardEndpoint())
-	if err != nil {
+	if claimPublicKey != "" {
+		message = "Wantastic device claimed successfully"
+		if existingClaimPeer != nil {
+			message = "Wantastic device is already claimed by this team"
+		}
+	}
+	wgConfig := ""
+	if claimPublicKey == "" {
+		wgConfig, err = s.server.GetPeerConfig(overlayAccountID, peerInfo.PublicKey, s.wireguardEndpoint())
+	}
+	if claimPublicKey == "" && err != nil {
 		log.Warn().
 			Err(err).
 			Str("tenant_id", req.TenantId).
@@ -3188,18 +3252,24 @@ func (s *TenantPortalServiceServer) AddTenantPeer(ctx context.Context, req *prot
 
 	protoPeer := &proto.Peer{
 		Id:         peerInfo.PublicKey,
-		Name:       req.Name,
+		Name:       peerInfo.Name,
 		AccountId:  overlayAccountID,
 		PublicKey:  peerInfo.PublicKey,
 		AssignedIp: peerIP,
 		IsOnline:   false,
+		ClientType: func() string {
+			if claimPublicKey != "" {
+				return "wantasticd"
+			}
+			return ""
+		}(),
 	}
 	enrichPeerSharedFlags(ctx, protoPeer, resourceTenantID)
 
 	log.Debug().
 		Str("tenant_id", req.TenantId).
 		Str("peer_id", peerInfo.PublicKey).
-		Str("peer_name", req.Name).
+		Str("peer_name", peerInfo.Name).
 		Str("peer_ip", peerIP).
 		Msg("Tenant added peer")
 
@@ -6854,4 +6924,3 @@ func (s *TenantPortalServiceServer) consoleBaseURL() string {
 	}
 	return "https://console.wantastic.app"
 }
-

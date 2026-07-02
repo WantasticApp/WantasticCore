@@ -167,13 +167,13 @@ function createAuthStore() {
           captchaRequired: true,
           captchaChallenge: response.captcha_challenge ?? null,
           loginSessionId: response.session_id ?? null,
-          message: response.error_code || response.message || "CAPTCHA required",
+          message: response.message || response.error_code || "CAPTCHA required",
         };
       }
 
       // Handle login failure
       if (!response.success) {
-        const errorMessage = response.error_code || response.message || "Login failed";
+        const errorMessage = response.message || response.error_code || "Login failed";
         update((s) => ({
           ...s,
           isLoading: false,
@@ -319,6 +319,14 @@ function createAuthStore() {
     }
   }
 
+  function expireSession(reason = "Session expired") {
+    wsStore.disconnect();
+    set({
+      ...initialState,
+      error: reason,
+    });
+  }
+
   /**
    * Check if user has active session from cookie
    * Called on app load to restore session
@@ -339,7 +347,9 @@ function createAuthStore() {
         email?: string;
         phone?: string;
         totp_enabled?: boolean;
-      }>("TenantPortalService", "GetTenantAccount", {});
+      }>("TenantPortalService", "GetTenantAccount", {}, {
+        suppressAuthExpiredEvent: true,
+      });
 
       if (response.tenant_id) {
         // console.log(' Session valid, user authenticated');
@@ -404,6 +414,7 @@ function createAuthStore() {
     login,
 
     logout,
+    expireSession,
     resend2FACode,
     checkSession,
     setLoading,

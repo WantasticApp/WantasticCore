@@ -8094,6 +8094,69 @@ func (x *RegisterDeviceResponse) GetEncryptedConfig() []byte {
 	return x.EncryptedConfig
 }
 
+type GetClaimedDeviceConfigRequest struct {
+	PublicKey string `json:"public_key,omitempty"`
+}
+
+func (x *GetClaimedDeviceConfigRequest) GetPublicKey() string {
+	if x == nil { return "" }
+	return x.PublicKey
+}
+
+type GetClaimedDeviceConfigResponse struct {
+	Claimed bool `json:"claimed"`
+	PublicKey string `json:"public_key,omitempty"`
+	AssignedIp string `json:"assigned_ip,omitempty"`
+	ServerKey string `json:"server_key,omitempty"`
+	Endpoint string `json:"endpoint,omitempty"`
+	AllowedIps []string `json:"allowed_ips,omitempty"`
+	DnsServers []string `json:"dns_servers,omitempty"`
+	PersistentKeepalive int32 `json:"persistent_keepalive,omitempty"`
+	Mtu int32 `json:"mtu,omitempty"`
+	ListenPort int32 `json:"listen_port,omitempty"`
+}
+
+func (x *GetClaimedDeviceConfigResponse) GetClaimed() bool {
+	if x == nil { return false }
+	return x.Claimed
+}
+func (x *GetClaimedDeviceConfigResponse) GetPublicKey() string {
+	if x == nil { return "" }
+	return x.PublicKey
+}
+func (x *GetClaimedDeviceConfigResponse) GetAssignedIp() string {
+	if x == nil { return "" }
+	return x.AssignedIp
+}
+func (x *GetClaimedDeviceConfigResponse) GetServerKey() string {
+	if x == nil { return "" }
+	return x.ServerKey
+}
+func (x *GetClaimedDeviceConfigResponse) GetEndpoint() string {
+	if x == nil { return "" }
+	return x.Endpoint
+}
+func (x *GetClaimedDeviceConfigResponse) GetAllowedIps() []string {
+	if x == nil { return nil }
+	return x.AllowedIps
+}
+func (x *GetClaimedDeviceConfigResponse) GetDnsServers() []string {
+	if x == nil { return nil }
+	return x.DnsServers
+}
+func (x *GetClaimedDeviceConfigResponse) GetPersistentKeepalive() int32 {
+	if x == nil { return 0 }
+	return x.PersistentKeepalive
+}
+func (x *GetClaimedDeviceConfigResponse) GetMtu() int32 {
+	if x == nil { return 0 }
+	return x.Mtu
+}
+func (x *GetClaimedDeviceConfigResponse) GetListenPort() int32 {
+	if x == nil { return 0 }
+	return x.ListenPort
+}
+
 type DeviceRefreshTokenRequest struct {
 	Token string `json:"token,omitempty"`
 }

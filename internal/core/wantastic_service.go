@@ -8,14 +8,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
-	pb "WantasticCore/internal/types"
 	"WantasticCore/internal/account"
 	"WantasticCore/internal/auth"
 	"WantasticCore/internal/server"
 	"WantasticCore/internal/tenant"
+	pb "WantasticCore/internal/types"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -197,6 +198,76 @@ func (s *WantasticServiceServer) RegisterDevice(ctx context.Context, req *pb.Reg
 		}
 	}
 	return resp, nil
+}
+
+// GetClaimedDeviceConfig returns the tunnel settings needed by a factory-keyed
+// agent after the QR public key has been claimed by a tenant. The device private
+// key is never sent to the server.
+func (s *WantasticServiceServer) GetClaimedDeviceConfig(ctx context.Context, req *pb.GetClaimedDeviceConfigRequest) (*pb.GetClaimedDeviceConfigResponse, error) {
+	publicKey := strings.TrimSpace(req.GetPublicKey())
+	if publicKey == "" {
+		return nil, errs.InvalidArgumentE("public_key required")
+	}
+
+	peer, err := s.server.FindPeer(publicKey)
+	if err != nil || peer == nil || strings.TrimSpace(peer.AccountID) == "" {
+		return &pb.GetClaimedDeviceConfigResponse{Claimed: false, PublicKey: publicKey}, nil
+	}
+
+	serverPublicKey := s.server.GetServerPublicKey(peer.AccountID)
+	serverEndpoint := s.server.GetServerEndpoint()
+	if serverPublicKey == "" {
+		return nil, errs.UnavailableE("server public key not available")
+	}
+	if serverEndpoint == "" {
+		return nil, errs.UnavailableE("server endpoint not configured")
+	}
+
+	acc, err := s.server.GetAccount(peer.AccountID)
+	if err != nil {
+		return nil, errs.Internalf("account not found for claimed device: %v", err)
+	}
+	allowedIPs, err := server.WireGuardAllowedIPs(acc.Networks)
+	if err != nil {
+		return nil, errs.Internalf("failed to derive tenant routes: %v", err)
+	}
+	dnsServer, err := primaryDNSFromNetworks(acc.Networks)
+	if err != nil {
+		return nil, errs.Internalf("failed to derive tenant dns server: %v", err)
+	}
+	wgConfig, err := s.server.GetPeerConfig(peer.AccountID, publicKey, serverEndpoint)
+	if err != nil {
+		return nil, errs.Internalf("failed to build claimed peer config: %v", err)
+	}
+	endpoint := firstWGConfigValue(wgConfig, "Endpoint")
+	dnsServers := splitWGCSV(firstWGConfigValue(wgConfig, "DNS"))
+	listenPort := int32(51820)
+	if _, port, splitErr := net.SplitHostPort(endpoint); splitErr == nil {
+		if parsedPort, scanErr := strconv.Atoi(port); scanErr == nil && parsedPort > 0 {
+			listenPort = int32(parsedPort)
+		}
+	}
+	if len(dnsServers) == 0 {
+		dnsServers = server.WireGuardDNSServers(dnsServer)
+	}
+
+	assignedIP := strings.TrimSpace(peer.AssignedIP)
+	if assignedIP != "" && !strings.Contains(assignedIP, "/") {
+		assignedIP += "/32"
+	}
+
+	return &pb.GetClaimedDeviceConfigResponse{
+		Claimed:             true,
+		PublicKey:           publicKey,
+		AssignedIp:          assignedIP,
+		ServerKey:           serverPublicKey,
+		Endpoint:            endpoint,
+		AllowedIps:          allowedIPs,
+		DnsServers:          dnsServers,
+		PersistentKeepalive: 25,
+		Mtu:                 1420,
+		ListenPort:          listenPort,
+	}, nil
 }
 
 // peerInfoToMetadata converts PeerInfo to PeerMetadata
@@ -409,6 +480,32 @@ func formatAgentEndpoint(endpoint string, listenPort int) string {
 		return fmt.Sprintf("[%s]:%d", endpoint, listenPort)
 	}
 	return fmt.Sprintf("%s:%d", endpoint, listenPort)
+}
+
+func firstWGConfigValue(configText, key string) string {
+	prefix := strings.ToLower(strings.TrimSpace(key)) + "="
+	for _, line := range strings.Split(configText, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToLower(strings.ReplaceAll(line, " ", "")), prefix) {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+	}
+	return ""
+}
+
+func splitWGCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // ─────────────────────────────────────────────

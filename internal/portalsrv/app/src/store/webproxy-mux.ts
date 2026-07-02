@@ -360,9 +360,12 @@ export class WebProxyMux {
       case 1: // text
         conn.onmessage?.(utf8dec.decode(body));
         return;
-      case 2: // binary
-        conn.onmessage?.(body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength));
+      case 2: { // binary
+        const payload = new Uint8Array(body.byteLength);
+        payload.set(body);
+        conn.onmessage?.(payload.buffer);
         return;
+      }
       case 8: // close
         conn.readyState = WebSocket.CLOSED;
         conn.onclose?.({ code: 1000, reason: utf8dec.decode(body) });
