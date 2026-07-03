@@ -390,6 +390,7 @@ export function searchSnapshot(
 /** Common object-path prefixes for quick navigation */
 export const WUSP_SECTIONS = [
   { label: "Device Info", path: "Device.DeviceInfo.", icon: "info" },
+  { label: "Cellular", path: "Device.Cellular.", icon: "radio" },
   { label: "WiFi", path: "Device.WiFi.", icon: "wifi" },
   { label: "IP", path: "Device.IP.", icon: "globe" },
   { label: "Firewall", path: "Device.Firewall.", icon: "shield" },

@@ -6,6 +6,7 @@
 package device
 
 import (
+	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -135,14 +136,14 @@ func (device *Device) SetPeerSessionConfirmedHandler(handler func(*Peer)) {
 
 // SendWUSP sends a WUSP control payload to the peer. Payloads larger than
 // WUSPMaxDatagramPayload must be pre-fragmented by the caller.
-func (peer *Peer) SendWUSP(data []byte) {
+func (peer *Peer) SendWUSP(data []byte) error {
 	if !peer.isRunning.Load() {
 		peer.device.log.Errorf("%v - SendWUSP: peer not running, dropping %d bytes", peer, len(data))
-		return
+		return fmt.Errorf("peer not running")
 	}
 	if len(data) > 1200 {
 		peer.device.log.Errorf("%v - SendWUSP: payload too large: %d bytes (max 1200)", peer, len(data))
-		return
+		return fmt.Errorf("payload too large: %d bytes", len(data))
 	}
 
 	elem := peer.device.NewOutboundElement()
@@ -160,10 +161,11 @@ func (peer *Peer) SendWUSP(data []byte) {
 		peer.device.PutMessageBuffer(elem.buffer)
 		peer.device.PutOutboundElement(elem)
 		peer.device.PutOutboundElementsContainer(elemsContainer)
-		return
+		return fmt.Errorf("staged queue full")
 	}
 
 	peer.SendStagedPackets()
+	return nil
 }
 
 // deviceState represents the state of a Device.

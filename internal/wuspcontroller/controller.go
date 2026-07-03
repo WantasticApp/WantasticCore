@@ -1326,6 +1326,7 @@ var syncDeviceStatePaths = []string{
 	"Device.DeviceInfo.", // identity, memory, uptime, hardware
 	"Device.Time.",       // NTP status, timezone
 	"Device.IP.",         // IPv4/IPv6 status, interfaces
+	"Device.Cellular.",   // LTE/5G modem status, signal, APN/SIM
 	"Device.Firewall.",   // firewall enable/type
 	"Device.WiFi.",       // radios, SSIDs, access points
 	"Device.WUSP.",       // WUSP protocol config

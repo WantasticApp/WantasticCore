@@ -291,7 +291,9 @@ func (td *TenantDevice) SendWUSP(peerPublicKey string, data []byte) error {
 	if peer == nil {
 		return fmt.Errorf("SendWUSP: peer %s not found", peerPublicKey)
 	}
-	peer.SendWUSP(data)
+	if err := peer.SendWUSP(data); err != nil {
+		return fmt.Errorf("SendWUSP: enqueue failed for peer %s: %w", peerPublicKey, err)
+	}
 	return nil
 }
 
