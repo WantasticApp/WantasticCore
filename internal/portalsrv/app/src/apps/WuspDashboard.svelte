@@ -11,7 +11,7 @@
   import { peerStore, type Peer } from '$store/peer';
   import { wuspStore, snapshotSections, isWuspActive, searchSnapshot, type SnapshotField } from '$store/wusp';
   import { snapshotStore, type DeviceSnapshot } from '$store/snapshot';
-  import { wsStore } from '$store/websocket';
+  import { wsConnectionGeneration, wsStore } from '$store/websocket';
   import { _ } from '$store/i18n';
   import Titlebar from '$components/shared/Titlebar.svelte';
   import { isMobile } from '$store/ui';
@@ -33,6 +33,9 @@
   let isMaximized = false;
   let isMinimized = false;
   let windowEl: HTMLDivElement;
+  let loadedPeerId = '';
+  let subscribedPeerId = '';
+  let lastRefreshGeneration = 0;
 
   $: selectedPeer = $peerStore.selectedPeer as Peer | null;
   // Server stores WUSP state keyed by WireGuard public_key, not DB id
@@ -56,14 +59,42 @@
   $: zIndex = $appZIndexes[APP_NAME] || 100;
 
   // Always try to load WUSP state — we can't know capability until we check
-  $: if (peerId) {
-    wuspStore.getDeviceState(peerId);
+  $: if (peerId && peerId !== loadedPeerId) {
+    loadPeer(peerId);
+  }
+
+  $: if (
+    peerId &&
+    loadedPeerId === peerId &&
+    $wsConnectionGeneration > 0 &&
+    $wsConnectionGeneration !== lastRefreshGeneration
+  ) {
+    refreshAfterReconnect(peerId, $wsConnectionGeneration);
   }
 
   function handleSync() {
     if (peerId && accountId) {
       wuspStore.syncDevice(peerId, accountId);
     }
+  }
+
+  function loadPeer(nextPeerId: string) {
+    if (subscribedPeerId && subscribedPeerId !== nextPeerId) {
+      wsStore.unsubscribeFromWusp(subscribedPeerId);
+      subscribedPeerId = '';
+    }
+    loadedPeerId = nextPeerId;
+    wuspStore.reset();
+    wuspStore.getDeviceState(nextPeerId);
+    wsStore.subscribeToWusp(nextPeerId);
+    subscribedPeerId = nextPeerId;
+    lastRefreshGeneration = $wsConnectionGeneration;
+  }
+
+  async function refreshAfterReconnect(nextPeerId: string, generation: number) {
+    lastRefreshGeneration = generation;
+    wsStore.subscribeToWusp(nextPeerId);
+    await wuspStore.getDeviceState(nextPeerId);
   }
 
   function handleFocus() {
@@ -129,13 +160,6 @@
   // the canonical Subscribe RPC down to the agent. wuspStore.applyNotify
   // (in store/wusp.ts) consumes the pushed events and mutates the snapshot
   // in place so the user sees changes without clicking Sync.
-  let subscribedPeerId = '';
-  $: if (peerId && peerId !== subscribedPeerId) {
-    if (subscribedPeerId) wsStore.unsubscribeFromWusp(subscribedPeerId);
-    wsStore.subscribeToWusp(peerId);
-    subscribedPeerId = peerId;
-  }
-
   onDestroy(() => {
     if (subscribedPeerId) {
       wsStore.unsubscribeFromWusp(subscribedPeerId);
@@ -233,6 +257,27 @@
 
   // ── Network interface extraction from snapshot ─────────────────────
   interface NetIface { name: string; status: string; type: string; mac: string; mtu: string; ips: string[]; }
+  interface CellularInterface {
+    name: string;
+    status: string;
+    accessTechnology: string;
+    operator: string;
+    imei: string;
+    iccid: string;
+    imsi: string;
+    apn: string;
+    rssi: string;
+    rsrp: string;
+    rsrq: string;
+    sinr: string;
+  }
+  interface LocationFix {
+    source: string;
+    acquiredTime: string;
+    latitude: string;
+    longitude: string;
+    altitude: string;
+  }
 
   $: networkInterfaces = (() => {
     const ifaces: NetIface[] = [];
@@ -256,6 +301,95 @@
       if (iface.name) ifaces.push(iface);
     }
     return ifaces;
+  })();
+
+  function signalQuality(rsrp: string, rssi: string): number {
+    const raw = Number(rsrp || rssi);
+    if (!Number.isFinite(raw) || raw === 0) return 0;
+    if (raw >= -85) return 4;
+    if (raw >= -95) return 3;
+    if (raw >= -105) return 2;
+    return 1;
+  }
+
+  function parseLocationDataObject(dataObject: string): { latitude: string; longitude: string; altitude: string } {
+    const pos = dataObject.match(/<[^>]*pos[^>]*>\s*([^<]+)\s*<\/[^>]*pos>/i)?.[1] || '';
+    const parts = pos.trim().split(/\s+/);
+    return {
+      latitude: parts[0] || '',
+      longitude: parts[1] || '',
+      altitude: parts[2] || '',
+    };
+  }
+
+  $: locationFix = (() => {
+    const parsed = parseLocationDataObject(sf('Device.DeviceInfo.Location.1.DataObject'));
+    const source = sf('Device.DeviceInfo.Location.1.Source');
+    const acquiredTime = sf('Device.DeviceInfo.Location.1.AcquiredTime');
+    if (!source && !acquiredTime && !parsed.latitude && !parsed.longitude) return null;
+    return {
+      source,
+      acquiredTime,
+      ...parsed,
+    } satisfies LocationFix;
+  })();
+
+  $: cellularInterfaces = (() => {
+    const modems: CellularInterface[] = [];
+    if (!snapshot || !Array.isArray(snapshot)) return modems;
+    const map: Record<string, CellularInterface> = {};
+    const ensure = (idx: string) => {
+      map[idx] ||= {
+        name: '',
+        status: '',
+        accessTechnology: '',
+        operator: '',
+        imei: '',
+        iccid: '',
+        imsi: '',
+        apn: '',
+        rssi: '',
+        rsrp: '',
+        rsrq: '',
+        sinr: '',
+      };
+      return map[idx];
+    };
+
+    for (const f of snapshot) {
+      const iface = f.path.match(/^Device\.Cellular\.Interface\.(\d+)\.(.+)$/);
+      const usim = f.path.match(/^Device\.Cellular\.Interface\.(\d+)\.(?:SIM|USIM)\.(?:\d+\.)?(.+)$/);
+      const apn = f.path.match(/^Device\.Cellular\.AccessPoint\.(\d+)\.(.+)$/);
+      if (iface) {
+        const modem = ensure(iface[1]);
+        const key = iface[2];
+        if (key === 'Name' || key === 'Alias') modem.name = f.value;
+        else if (key === 'Status' || key === 'RegistrationStatus') modem.status = f.value;
+        else if (key === 'CurrentAccessTechnology' || key === 'AccessTechnology') modem.accessTechnology = f.value;
+        else if (key === 'NetworkInUse' || key === 'Operator' || key === 'PLMN') modem.operator = f.value;
+        else if (key === 'IMEI') modem.imei = f.value;
+        else if (key.endsWith('RSSI') || key === 'SignalStrength') modem.rssi = f.value;
+        else if (key.endsWith('RSRP')) modem.rsrp = f.value;
+        else if (key.endsWith('RSRQ')) modem.rsrq = f.value;
+        else if (key.endsWith('SINR') || key.endsWith('SNR')) modem.sinr = f.value;
+      }
+      if (usim) {
+        const modem = ensure(usim[1]);
+        if (usim[2] === 'ICCID') modem.iccid = f.value;
+        else if (usim[2] === 'IMSI') modem.imsi = f.value;
+      }
+      if (apn) {
+        const modem = ensure(apn[1]);
+        if (apn[2] === 'APN' || apn[2] === 'Name') modem.apn = f.value;
+      }
+    }
+
+    for (const [, modem] of Object.entries(map).sort(([a], [b]) => Number(a) - Number(b))) {
+      if (modem.name || modem.status || modem.accessTechnology || modem.imei || modem.iccid || modem.apn) {
+        modems.push(modem);
+      }
+    }
+    return modems;
   })();
 
   // ── Data Model search ──────────────────────────────────────────────
@@ -652,6 +786,62 @@
                 <div class="field"><label>Max Payload</label><span>{getField('Device.WUSP.MaxControlPayload') || '1200'} bytes</span></div>
                 <div class="field"><label>Tunnel Only</label><span>{getField('Device.WUSP.TunnelOnly') || 'true'}</span></div>
               </div>
+            </div>
+
+            <!-- Location -->
+            <div class="card">
+              <div class="card-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1116 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <h3>Location</h3>
+              </div>
+              {#if locationFix}
+                <div class="field-grid">
+                  <div class="field"><span class="field-label">Source</span><span>{locationFix.source || 'Unknown'}</span></div>
+                  <div class="field"><span class="field-label">Acquired</span><span>{locationFix.acquiredTime ? new Date(locationFix.acquiredTime).toLocaleString() : 'N/A'}</span></div>
+                  <div class="field"><span class="field-label">Latitude</span><span class="mono">{locationFix.latitude || 'N/A'}</span></div>
+                  <div class="field"><span class="field-label">Longitude</span><span class="mono">{locationFix.longitude || 'N/A'}</span></div>
+                  <div class="field"><span class="field-label">Altitude</span><span>{locationFix.altitude ? `${locationFix.altitude} m` : 'N/A'}</span></div>
+                </div>
+              {:else}
+                <div class="field-muted">No GPS/location fields in the current snapshot.</div>
+              {/if}
+            </div>
+
+            <!-- Cellular Telemetry -->
+            <div class="card">
+              <div class="card-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 20.5a12 12 0 0111 0"/><path d="M4 17a16 16 0 0116 0"/><path d="M2 13.5a20 20 0 0120 0"/><circle cx="12" cy="20" r="1"/></svg>
+                <h3>Cellular Telemetry</h3>
+              </div>
+              {#if cellularInterfaces.length > 0}
+                <div class="cellular-list">
+                  {#each cellularInterfaces as modem}
+                    <div class="cellular-row">
+                      <div class="cellular-head">
+                        <div>
+                          <strong>{modem.name || 'Cellular modem'}</strong>
+                          <span>{modem.accessTechnology || 'Radio'}{modem.operator ? ` · ${modem.operator}` : ''}</span>
+                        </div>
+                        <div class="signal-bars" title={`RSRP ${modem.rsrp || 'N/A'} RSSI ${modem.rssi || 'N/A'}`}>
+                          {#each [1, 2, 3, 4] as bar}
+                            <i class:lit={bar <= signalQuality(modem.rsrp, modem.rssi)} />
+                          {/each}
+                        </div>
+                      </div>
+                      <div class="field-grid cellular-grid">
+                        <div class="field"><span class="field-label">Status</span><span class="badge small" class:active={modem.status === 'Up' || modem.status === 'Registered'}>{modem.status || 'Unknown'}</span></div>
+                        <div class="field"><span class="field-label">RSRP</span><span>{modem.rsrp || 'N/A'}</span></div>
+                        <div class="field"><span class="field-label">RSRQ</span><span>{modem.rsrq || 'N/A'}</span></div>
+                        <div class="field"><span class="field-label">SINR</span><span>{modem.sinr || 'N/A'}</span></div>
+                        <div class="field"><span class="field-label">APN</span><span>{modem.apn || 'N/A'}</span></div>
+                        <div class="field"><span class="field-label">ICCID</span><span class="mono">{modem.iccid || 'N/A'}</span></div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="field-muted">No cellular rows in the current snapshot. Sync includes Device.Cellular; older agents may need an update.</div>
+              {/if}
             </div>
 
             <!-- Uptime -->
@@ -1514,6 +1704,67 @@
   }
   .identity-card { grid-column: 1 / -1; }
 
+  .cellular-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .cellular-row {
+    border-radius: 12px;
+    padding: 10px;
+    background: rgb(var(--clr) / 5%);
+  }
+
+  .cellular-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .cellular-head strong,
+  .cellular-head span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cellular-head span {
+    margin-top: 3px;
+    color: rgb(var(--clr) / 56%);
+    font-size: 12px;
+  }
+
+  .cellular-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .signal-bars {
+    display: inline-flex;
+    align-items: end;
+    gap: 3px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .signal-bars i {
+    display: block;
+    width: 5px;
+    border-radius: 3px;
+    background: rgb(var(--clr) / 16%);
+  }
+
+  .signal-bars i:nth-child(1) { height: 7px; }
+  .signal-bars i:nth-child(2) { height: 11px; }
+  .signal-bars i:nth-child(3) { height: 15px; }
+  .signal-bars i:nth-child(4) { height: 19px; }
+
+  .signal-bars i.lit {
+    background: rgb(12 214 142);
+  }
+
   .field-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1522,7 +1773,8 @@
   .field-grid.three-col {
     grid-template-columns: 1fr 1fr 1fr;
   }
-  .field label {
+  .field label,
+  .field-label {
     display: block;
     font-size: 11px;
     color: rgb(var(--clr) / 40%);

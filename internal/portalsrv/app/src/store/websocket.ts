@@ -77,6 +77,11 @@ export interface GRPCResponse {
 
 export interface CallGRPCOptions {
   /**
+   * Override the default request timeout for operations that legitimately take
+   * longer than the normal websocket RPC budget, such as WUSP data-model sync.
+   */
+  timeoutMs?: number;
+  /**
    * Expected anonymous probes like authStore.checkSession() should fail as
    * "not signed in" without dispatching the global session-expired event.
    */
@@ -1220,6 +1225,7 @@ function createWebSocketStore() {
       }
 
       const requestId = `${service}-${method}-${Date.now()}-${Math.random()}`;
+      const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT;
       const timeout = setTimeout(() => {
         pendingRequests.delete(requestId);
         reject(
@@ -1229,7 +1235,7 @@ function createWebSocketStore() {
             `gRPC call timeout: ${service}.${method}`
           )
         );
-      }, REQUEST_TIMEOUT);
+      }, timeoutMs);
 
       pendingRequests.set(requestId, {
         resolve,

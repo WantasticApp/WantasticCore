@@ -4,13 +4,15 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	pb "WantasticCore/internal/types"
 	"WantasticCore/internal/store"
+	pb "WantasticCore/internal/types"
 	"WantasticCore/internal/wusp"
 	"WantasticCore/internal/wuspcontroller"
 )
@@ -30,6 +32,14 @@ type RedisClient interface {
 	Del(ctx context.Context, keys ...string) error
 }
 
+const wuspLiveStateCacheTTL = 24 * time.Hour
+
+type wuspSnapshotField struct {
+	Path   string `json:"path"`
+	Value  string `json:"value"`
+	Access string `json:"access,omitempty"`
+}
+
 // NewWUSPService creates a WUSPService backed by the given controller.
 func NewWUSPService(ctrl *wuspcontroller.WUSPController) *WUSPService {
 	return &WUSPService{ctrl: ctrl}
@@ -43,11 +53,25 @@ func (s *WUSPService) SetRedis(r RedisClient) {
 // GetDeviceState returns the last persisted device model snapshot for a peer.
 func (s *WUSPService) GetDeviceState(ctx context.Context, req *pb.GetWUSPDeviceStateRequest) (*pb.GetWUSPDeviceStateResponse, error) {
 	state, err := s.ctrl.StateRepo().GetByPeer(req.PeerId)
+	if err == nil && state != nil {
+		if req.AccountId != "" && state.AccountID != "" && state.AccountID != req.AccountId {
+			return nil, fmt.Errorf("wusp: GetDeviceState: peer does not belong to account")
+		}
+		s.cacheDeviceState(ctx, state)
+		return &pb.GetWUSPDeviceStateResponse{
+			State: deviceStateToProto(state),
+		}, nil
+	}
+	if cached, ok := s.getCachedDeviceState(ctx, req.AccountId, req.PeerId); ok {
+		return &pb.GetWUSPDeviceStateResponse{
+			State: deviceStateToProto(cached),
+		}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("wusp: GetDeviceState: %w", err)
 	}
 	return &pb.GetWUSPDeviceStateResponse{
-		State: deviceStateToProto(state),
+		State: nil,
 	}, nil
 }
 
@@ -74,6 +98,7 @@ func (s *WUSPService) SyncDeviceState(ctx context.Context, req *pb.SyncWUSPDevic
 	if err != nil {
 		return &pb.SyncWUSPDeviceStateResponse{Success: true}, nil
 	}
+	s.cacheDeviceState(ctx, state)
 	return &pb.SyncWUSPDeviceStateResponse{
 		Success: true,
 		State:   deviceStateToProto(state),
@@ -89,9 +114,11 @@ func (s *WUSPService) SendGet(ctx context.Context, req *pb.WUSPGetRequest) (*pb.
 	if resp.Error != "" {
 		return &pb.WUSPGetResponse{Success: false, Error: resp.Error}, nil
 	}
+	params := messageToParams(resp.Message)
+	s.cacheLiveParams(ctx, req.AccountId, req.PeerId, params)
 	return &pb.WUSPGetResponse{
 		Success: true,
-		Params:  messageToParams(resp.Message),
+		Params:  params,
 	}, nil
 }
 
@@ -107,6 +134,7 @@ func (s *WUSPService) SendSet(ctx context.Context, req *pb.WUSPSetRequest) (*pb.
 	if resp.Error != "" {
 		return &pb.WUSPSetResponse{Success: false, Error: resp.Error}, nil
 	}
+	s.cacheLiveParams(ctx, req.AccountId, req.PeerId, req.Params)
 	return &pb.WUSPSetResponse{Success: true}, nil
 }
 
@@ -120,9 +148,11 @@ func (s *WUSPService) SendOperate(ctx context.Context, req *pb.WUSPOperateReques
 	if resp.Error != "" {
 		return &pb.WUSPOperateResponse{Success: false, Error: resp.Error}, nil
 	}
+	params := messageToParams(resp.Message)
+	s.cacheLiveParams(ctx, req.AccountId, req.PeerId, params)
 	return &pb.WUSPOperateResponse{
 		Success:      true,
-		OutputParams: messageToParams(resp.Message),
+		OutputParams: params,
 	}, nil
 }
 
@@ -148,10 +178,10 @@ func (s *WUSPService) SendAdd(ctx context.Context, req *pb.WUSPAddRequest) (*pb.
 				errMsg += ": " + setResp.Error
 			}
 			return &pb.WUSPAddResponse{
-				Success:       true,
-				InstancePath:  resp.ObjectPath,
-				CreatedPaths:  resp.Paths,
-				Error:         errMsg,
+				Success:      true,
+				InstancePath: resp.ObjectPath,
+				CreatedPaths: resp.Paths,
+				Error:        errMsg,
 			}, nil
 		}
 	}
@@ -625,6 +655,124 @@ func messageToParams(msg *wusp.Message) []*pb.WUSPParam {
 		out = append(out, &pb.WUSPParam{Path: f.Path, Value: wusp.ValueToString(f.Val)})
 	}
 	return out
+}
+
+func wuspLiveStateCacheKey(accountID, peerID string) string {
+	return "wusp:state:v1:" + accountID + ":" + peerID
+}
+
+func (s *WUSPService) cacheDeviceState(ctx context.Context, state *store.WUSPDeviceStateData) {
+	if s.redis == nil || state == nil || state.AccountID == "" || state.PeerID == "" {
+		return
+	}
+	data, err := json.Marshal(state)
+	if err != nil {
+		return
+	}
+	_ = s.redis.Set(ctx, wuspLiveStateCacheKey(state.AccountID, state.PeerID), string(data), wuspLiveStateCacheTTL)
+}
+
+func (s *WUSPService) getCachedDeviceState(ctx context.Context, accountID, peerID string) (*store.WUSPDeviceStateData, bool) {
+	if s.redis == nil || accountID == "" || peerID == "" {
+		return nil, false
+	}
+	raw, err := s.redis.Get(ctx, wuspLiveStateCacheKey(accountID, peerID))
+	if err != nil || raw == "" {
+		return nil, false
+	}
+	var state store.WUSPDeviceStateData
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		return nil, false
+	}
+	if state.AccountID != accountID || state.PeerID != peerID {
+		return nil, false
+	}
+	return &state, true
+}
+
+func (s *WUSPService) cacheLiveParams(ctx context.Context, accountID, peerID string, params []*pb.WUSPParam) {
+	if s.redis == nil || accountID == "" || peerID == "" || len(params) == 0 {
+		return
+	}
+	state, _ := s.ctrl.StateRepo().GetByPeer(peerID)
+	if state == nil || state.AccountID != accountID {
+		state, _ = s.getCachedDeviceState(ctx, accountID, peerID)
+	}
+	if state == nil {
+		now := time.Now()
+		state = &store.WUSPDeviceStateData{
+			PeerID:     peerID,
+			AccountID:  accountID,
+			LastSyncAt: now,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+	}
+
+	fields := make(map[string]wuspSnapshotField)
+	var existing []wuspSnapshotField
+	if len(state.DeviceSnapshot) > 0 && json.Unmarshal(state.DeviceSnapshot, &existing) == nil {
+		for _, field := range existing {
+			if field.Path != "" {
+				fields[field.Path] = field
+			}
+		}
+	}
+	for _, param := range params {
+		if param == nil || param.Path == "" || !isSafeWUSPCachePath(param.Path) {
+			continue
+		}
+		current := fields[param.Path]
+		current.Path = param.Path
+		current.Value = param.Value
+		fields[param.Path] = current
+		updateIndexedDeviceStateField(state, param.Path, param.Value)
+	}
+	merged := make([]wuspSnapshotField, 0, len(fields))
+	for _, field := range fields {
+		merged = append(merged, field)
+	}
+	sort.Slice(merged, func(i, j int) bool { return merged[i].Path < merged[j].Path })
+	if data, err := json.Marshal(merged); err == nil {
+		state.DeviceSnapshot = data
+	}
+	now := time.Now()
+	state.LastSyncAt = now
+	state.UpdatedAt = now
+	s.cacheDeviceState(ctx, state)
+}
+
+func isSafeWUSPCachePath(path string) bool {
+	lower := strings.ToLower(path)
+	for _, token := range []string{"password", "passphrase", "username", "secret", "privatekey", "token", "credential", "psk", "certificate"} {
+		if strings.Contains(lower, token) {
+			return false
+		}
+	}
+	return true
+}
+
+func updateIndexedDeviceStateField(state *store.WUSPDeviceStateData, path, value string) {
+	switch path {
+	case "Device.DeviceInfo.DeviceID":
+		state.DeviceID = value
+	case "Device.DeviceInfo.Manufacturer":
+		state.Manufacturer = value
+	case "Device.DeviceInfo.ProductClass":
+		state.ProductClass = value
+	case "Device.DeviceInfo.SerialNumber":
+		state.SerialNumber = value
+	case "Device.DeviceInfo.SoftwareVersion":
+		state.SoftwareVersion = value
+	case "Device.DeviceInfo.HardwareVersion":
+		state.HardwareVersion = value
+	case "Device.WUSP.Enable":
+		state.WUSPEnable = strings.EqualFold(value, "true") || value == "1"
+	case "Device.WUSP.Status":
+		state.WUSPStatus = value
+	case "Device.WUSP.ProtocolVersion":
+		state.WUSPVersion = value
+	}
 }
 
 func (s *WUSPService) paramsToMessage(params []*pb.WUSPParam) *wusp.Message {

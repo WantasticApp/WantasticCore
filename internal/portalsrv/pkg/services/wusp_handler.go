@@ -19,11 +19,19 @@ func (p *TenantProxy) handleWUSPService(ctx context.Context, msg *Message, sessi
 		return errorResponse(msg.ID, fmt.Errorf("authentication required"))
 	}
 
-	// Default timeout for WUSP operations. SyncDeviceState gets a longer
-	// timeout since it involves a full WireGuard round-trip + data collection.
+	// Default timeout for WUSP operations. SyncDeviceState/GetSupportedDM get a
+	// longer timeout since they can involve several WireGuard control fragments
+	// and a device-side data-model walk. The dashboard keeps cached state visible
+	// while these live calls run, so a longer deadline avoids false timeout errors
+	// on cellular links.
 	timeout := 15 * time.Second
-	if msg.Method == "SyncDeviceState" {
+	switch msg.Method {
+	case "SyncDeviceState", "GetSupportedDM":
+		timeout = 90 * time.Second
+	case "SendOperate":
 		timeout = 45 * time.Second
+	case "GetSupportedProtocol", "SendGet", "SendSet", "SendAdd", "SendDelete":
+		timeout = 30 * time.Second
 	}
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -235,4 +243,3 @@ func (p *TenantProxy) handleWUSPService(ctx context.Context, msg *Message, sessi
 // wuspConn / inProcessClientConn helpers were removed when every caller
 // migrated to direct p.services.X dispatch. See git history for the old
 // gRPC-style versions.
-

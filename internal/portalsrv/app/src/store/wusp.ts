@@ -46,12 +46,87 @@ export interface WUSPState {
   isSyncing: boolean;
   isSetting: boolean;
   error: string | null;
+  liveStatus: string;
   lastSyncTime: number | null;
 }
 
 // ============================================================================
 // Store
 // ============================================================================
+
+function decodeMaybeBase64JSON(raw: unknown): string {
+  if (typeof raw === "string") {
+    try {
+      return atob(raw);
+    } catch {
+      return raw;
+    }
+  }
+  if (raw instanceof Uint8Array) {
+    return new TextDecoder().decode(raw);
+  }
+  if (raw instanceof ArrayBuffer) {
+    return new TextDecoder().decode(raw);
+  }
+  return "";
+}
+
+function parseSnapshot(raw: unknown): SnapshotField[] {
+  const jsonStr = decodeMaybeBase64JSON(raw);
+  if (!jsonStr) return [];
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((field) => field && typeof field.path === "string")
+      .map((field) => ({
+        path: field.path,
+        value: field.value == null ? "" : String(field.value),
+        access: typeof field.access === "string" ? field.access : undefined,
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  } catch {
+    return [];
+  }
+}
+
+function upsertSnapshotFields(
+  snapshot: SnapshotField[],
+  params: WUSPParam[],
+): SnapshotField[] {
+  if (!params.length) return snapshot;
+  const byPath = new Map(snapshot.map((field) => [field.path, field]));
+  for (const param of params) {
+    if (!param.path) continue;
+    const existing = byPath.get(param.path);
+    byPath.set(param.path, {
+      ...(existing ?? { path: param.path }),
+      value: param.value == null ? "" : String(param.value),
+    });
+  }
+  return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function paramsFromNotifyData(data: Record<string, any>): WUSPParam[] {
+  const params: WUSPParam[] = [];
+  const add = (path: unknown, value: unknown) => {
+    if (typeof path !== "string" || !path) return;
+    params.push({ path, value: value == null ? "" : String(value) });
+  };
+
+  if (Array.isArray(data.params)) {
+    for (const item of data.params) {
+      add(item?.path ?? item?.Path, item?.value ?? item?.Value);
+    }
+  } else if (data.params && typeof data.params === "object") {
+    for (const [path, value] of Object.entries(data.params)) {
+      add(path, value);
+    }
+  }
+
+  add(data.obj_path || data.path || data.event_path, data.param_value ?? data.value);
+  return params;
+}
 
 function createWuspStore() {
   const initial: WUSPState = {
@@ -62,6 +137,7 @@ function createWuspStore() {
     isSyncing: false,
     isSetting: false,
     error: null,
+    liveStatus: "Loading cached device model",
     lastSyncTime: null,
   };
 
@@ -80,34 +156,20 @@ function createWuspStore() {
           { peer_id: peerId },
         );
         const state = resp.state;
-        let snapshot: SnapshotField[] = [];
-        if (state?.device_snapshot) {
-          try {
-            const raw = state.device_snapshot;
-            let jsonStr: string;
-            if (typeof raw === "string") {
-              // protojson encodes bytes as base64 — decode first
-              try { jsonStr = atob(raw); } catch { jsonStr = raw; }
-            } else {
-              jsonStr = new TextDecoder().decode(raw as any);
-            }
-            snapshot = JSON.parse(jsonStr);
-            if (!Array.isArray(snapshot)) snapshot = [];
-          } catch {
-            snapshot = [];
-          }
-        }
+        const snapshot = parseSnapshot(state?.device_snapshot);
         update((s) => ({
           ...s,
           isLoading: false,
           deviceState: state,
           snapshot,
+          liveStatus: state ? "Cached model loaded" : "No cached WUSP model yet",
           lastSyncTime: state?.last_sync_at ? state.last_sync_at * 1000 : null,
         }));
       } catch (e: any) {
         update((s) => ({
           ...s,
           isLoading: false,
+          liveStatus: s.snapshot.length ? "Using cached model; live load failed" : "Cached model unavailable",
           error: e.message || "Failed to load device state",
         }));
       }
@@ -115,7 +177,7 @@ function createWuspStore() {
 
     /** Force live sync from device (round-trip via WireGuard) */
     async syncDevice(peerId: string, accountId: string) {
-      update((s) => ({ ...s, isSyncing: true, error: null }));
+      update((s) => ({ ...s, isSyncing: true, liveStatus: "Syncing live device model", error: null }));
       try {
         const resp = await wsStore.callGRPC<{
           success: boolean;
@@ -124,35 +186,25 @@ function createWuspStore() {
         }>("WUSPService", "SyncDeviceState", {
           peer_id: peerId,
           account_id: accountId,
-        });
+        }, { timeoutMs: 90000 });
         if (!resp.success) throw new Error(resp.error || "Sync failed");
         const state = resp.state;
-        let snapshot: SnapshotField[] = [];
-        if (state?.device_snapshot) {
-          try {
-            const raw = state.device_snapshot;
-            let jsonStr: string;
-            if (typeof raw === "string") {
-              // protojson encodes bytes as base64 — decode first
-              try { jsonStr = atob(raw); } catch { jsonStr = raw; }
-            } else {
-              jsonStr = new TextDecoder().decode(raw as any);
-            }
-            snapshot = JSON.parse(jsonStr);
-            if (!Array.isArray(snapshot)) snapshot = [];
-          } catch {
-            snapshot = [];
-          }
-        }
+        const snapshot = parseSnapshot(state?.device_snapshot);
         update((s) => ({
           ...s,
           isSyncing: false,
           deviceState: state,
           snapshot,
+          liveStatus: "Live sync complete",
           lastSyncTime: Date.now(),
         }));
       } catch (e: any) {
-        update((s) => ({ ...s, isSyncing: false, error: e.message }));
+        update((s) => ({
+          ...s,
+          isSyncing: false,
+          liveStatus: s.snapshot.length ? "Live sync failed; showing last cached model" : "Live sync failed",
+          error: e.message,
+        }));
       }
     },
 
@@ -167,16 +219,19 @@ function createWuspStore() {
         }>("WUSPService", "SendGet", {
           peer_id: peerId,
           paths,
-        });
+        }, { timeoutMs: 30000 });
         if (!resp.success) throw new Error(resp.error || "Get failed");
         update((s) => ({
           ...s,
           isLoading: false,
           liveParams: resp.params ?? [],
+          snapshot: upsertSnapshotFields(s.snapshot, resp.params ?? []),
+          liveStatus: "Live parameters updated",
+          lastSyncTime: Date.now(),
         }));
         return resp.params ?? [];
       } catch (e: any) {
-        update((s) => ({ ...s, isLoading: false, error: e.message }));
+        update((s) => ({ ...s, isLoading: false, liveStatus: "Live read failed", error: e.message }));
         return [];
       }
     },
@@ -194,12 +249,18 @@ function createWuspStore() {
         }>("WUSPService", "SendSet", {
           peer_id: peerId,
           params,
-        });
+        }, { timeoutMs: 30000 });
         if (!resp.success) throw new Error(resp.error || "Set failed");
-        update((s) => ({ ...s, isSetting: false }));
+        update((s) => ({
+          ...s,
+          isSetting: false,
+          snapshot: upsertSnapshotFields(s.snapshot, params),
+          liveStatus: "Write accepted",
+          lastSyncTime: Date.now(),
+        }));
         return true;
       } catch (e: any) {
-        update((s) => ({ ...s, isSetting: false, error: e.message }));
+        update((s) => ({ ...s, isSetting: false, liveStatus: "Write failed", error: e.message }));
         return false;
       }
     },
@@ -220,12 +281,18 @@ function createWuspStore() {
           peer_id: peerId,
           command_path: commandPath,
           input_params: inputParams ?? [],
-        });
+        }, { timeoutMs: 45000 });
         if (!resp.success) throw new Error(resp.error || "Operate failed");
-        update((s) => ({ ...s, isLoading: false }));
+        update((s) => ({
+          ...s,
+          isLoading: false,
+          snapshot: upsertSnapshotFields(s.snapshot, resp.output_params ?? []),
+          liveStatus: "Operation complete",
+          lastSyncTime: Date.now(),
+        }));
         return resp.output_params ?? [];
       } catch (e: any) {
-        update((s) => ({ ...s, isLoading: false, error: e.message }));
+        update((s) => ({ ...s, isLoading: false, liveStatus: "Operation failed", error: e.message }));
         return [];
       }
     },
@@ -298,22 +365,25 @@ function createWuspStore() {
     applyNotify(peerId: string, path: string, value: string) {
       update((s) => {
         if (!s.deviceState || s.deviceState.peer_id !== peerId) return s;
-        let mutated = false;
-        const snapshot = s.snapshot.map((f) => {
-          if (f.path === path) {
-            mutated = true;
-            return { ...f, value };
-          }
-          return f;
-        });
-        // If the path wasn't in our snapshot yet (e.g. dynamic instance),
-        // append it so the dashboard learns about it on the fly.
-        if (!mutated && path) {
-          snapshot.push({ path, value });
-          mutated = true;
-        }
-        if (!mutated) return s;
-        return { ...s, snapshot, lastSyncTime: Date.now() };
+        return {
+          ...s,
+          snapshot: upsertSnapshotFields(s.snapshot, [{ path, value }]),
+          liveStatus: "Live event received",
+          lastSyncTime: Date.now(),
+        };
+      });
+    },
+
+    applyNotifyParams(peerId: string, params: WUSPParam[]) {
+      update((s) => {
+        if (!s.deviceState || s.deviceState.peer_id !== peerId) return s;
+        if (!params.length) return s;
+        return {
+          ...s,
+          snapshot: upsertSnapshotFields(s.snapshot, params),
+          liveStatus: "Live event received",
+          lastSyncTime: Date.now(),
+        };
       });
     },
   };
@@ -337,10 +407,9 @@ wsStore.subscribe((wsState) => {
     const ev = wsState.events[i];
     if (!ev || ev.type !== "wusp_notify") continue;
     const data = (ev as any).data || {};
-    const path: string = data.obj_path || data.path || "";
-    const value: string = data.param_value ?? data.value ?? "";
-    if (!path) continue;
-    wuspStore.applyNotify(ev.peerId, path, String(value));
+    const params = paramsFromNotifyData(data);
+    if (!params.length) continue;
+    wuspStore.applyNotifyParams(ev.peerId, params);
   }
   _lastWuspEventCount = wsState.events.length;
 });
@@ -390,6 +459,7 @@ export function searchSnapshot(
 /** Common object-path prefixes for quick navigation */
 export const WUSP_SECTIONS = [
   { label: "Device Info", path: "Device.DeviceInfo.", icon: "info" },
+  { label: "Location", path: "Device.DeviceInfo.Location.", icon: "map-pin" },
   { label: "Cellular", path: "Device.Cellular.", icon: "radio" },
   { label: "WiFi", path: "Device.WiFi.", icon: "wifi" },
   { label: "IP", path: "Device.IP.", icon: "globe" },

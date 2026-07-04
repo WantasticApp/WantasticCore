@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"WantasticCore/internal/store"
 	pb "WantasticCore/internal/types"
 )
 
@@ -142,5 +143,48 @@ func TestGenerateBackupTokenRotatesPreviousPeerToken(t *testing.T) {
 	currentVal, _ := redis.Get(context.Background(), peerBackupTokenKey("acct-rotate", "peer-rotate"))
 	if currentVal != second.UploadToken {
 		t.Fatalf("current peer token mismatch: got %q want %q", currentVal, second.UploadToken)
+	}
+}
+
+func TestWUSPLiveStateCacheRoundTrip(t *testing.T) {
+	svc := &WUSPService{}
+	redis := newMockRedis()
+	svc.SetRedis(redis)
+
+	want := &store.WUSPDeviceStateData{
+		PeerID:         "peer-cache",
+		AccountID:      "acct-cache",
+		LastSyncAt:     time.Unix(100, 0),
+		DeviceSnapshot: []byte(`[{"path":"Device.DeviceInfo.Manufacturer","value":"Wantastic"}]`),
+		Manufacturer:   "Wantastic",
+		WUSPStatus:     "Active",
+	}
+	svc.cacheDeviceState(context.Background(), want)
+
+	got, ok := svc.getCachedDeviceState(context.Background(), "acct-cache", "peer-cache")
+	if !ok {
+		t.Fatal("expected cached state")
+	}
+	if got.AccountID != want.AccountID || got.PeerID != want.PeerID || got.Manufacturer != want.Manufacturer {
+		t.Fatalf("cached state mismatch: got %+v want %+v", got, want)
+	}
+	if _, ok := svc.getCachedDeviceState(context.Background(), "other-account", "peer-cache"); ok {
+		t.Fatal("cache should not return a peer under a different account key")
+	}
+}
+
+func TestWUSPLiveStateCacheSensitivePathFilter(t *testing.T) {
+	for _, path := range []string{
+		"Device.Cellular.AccessPoint.1.Username",
+		"Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
+		"Device.WUSP.Certificate.1.Value",
+		"Device.LocalAgent.Controller.1.Password",
+	} {
+		if isSafeWUSPCachePath(path) {
+			t.Fatalf("expected sensitive path to be excluded from Redis overlay cache: %s", path)
+		}
+	}
+	if !isSafeWUSPCachePath("Device.Cellular.Interface.1.RSRP") {
+		t.Fatal("expected telemetry path to be safe for Redis overlay cache")
 	}
 }
