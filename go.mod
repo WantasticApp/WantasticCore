@@ -5,7 +5,7 @@ go 1.25.6
 toolchain go1.25.10
 
 require (
-	github.com/a-h/templ v0.3.977
+	github.com/a-h/templ v0.3.1020
 	github.com/anthropics/anthropic-sdk-go v1.36.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
@@ -88,7 +88,7 @@ require (
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/go-pg/pg/v10 v10.15.0
+	github.com/go-pg/pg/v10 v10.15.1
 	github.com/google/btree v1.1.3 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
