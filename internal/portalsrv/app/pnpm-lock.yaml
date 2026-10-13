@@ -47,10 +47,10 @@ importers:
         version: 1.2.59
       '@sveltejs/vite-plugin-svelte':
         specifier: ^2.5.3
-        version: 2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+        version: 2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
       '@testing-library/svelte':
         specifier: ^5.3.1
-        version: 5.3.1(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))(vitest@4.1.6(@types/node@20.19.35)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3)))
+        version: 5.3.1(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))(vitest@4.1.6(@types/node@25.9.1)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3)))
       '@tsconfig/svelte':
         specifier: ^4.0.1
         version: 4.0.1
@@ -58,8 +58,8 @@ importers:
         specifier: ^7.4.3
         version: 7.4.3
       '@types/node':
-        specifier: ^20.12.11
-        version: 20.19.35
+        specifier: ^25.9.1
+        version: 25.9.1
       '@xterm/addon-web-links':
         specifier: ^0.12.0
         version: 0.12.0
@@ -113,13 +113,13 @@ importers:
         version: 23.0.1(svelte@3.59.2)
       vite:
         specifier: ^4.5.3
-        version: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
+        version: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
       vite-plugin-compression:
         specifier: ^0.5.1
-        version: 0.5.1(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+        version: 0.5.1(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
       vitest:
         specifier: ^4.1.6
-        version: 4.1.6(@types/node@20.19.35)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+        version: 4.1.6(@types/node@25.9.1)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
 
 packages:
 
@@ -373,42 +373,36 @@ packages:
     engines: {node: '>= 10.0.0'}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@parcel/watcher-linux-arm-musl@2.5.6':
     resolution: {integrity: sha512-Ve3gUCG57nuUUSyjBq/MAM0CzArtuIOxsBdQ+ftz6ho8n7s1i9E1Nmk/xmP323r2YL0SONs1EuwqBp2u1k5fxg==}
     engines: {node: '>= 10.0.0'}
     cpu: [arm]
     os: [linux]
-    libc: [musl]
 
   '@parcel/watcher-linux-arm64-glibc@2.5.6':
     resolution: {integrity: sha512-f2g/DT3NhGPdBmMWYoxixqYr3v/UXcmLOYy16Bx0TM20Tchduwr4EaCbmxh1321TABqPGDpS8D/ggOTaljijOA==}
     engines: {node: '>= 10.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@parcel/watcher-linux-arm64-musl@2.5.6':
     resolution: {integrity: sha512-qb6naMDGlbCwdhLj6hgoVKJl2odL34z2sqkC7Z6kzir8b5W65WYDpLB6R06KabvZdgoHI/zxke4b3zR0wAbDTA==}
     engines: {node: '>= 10.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@parcel/watcher-linux-x64-glibc@2.5.6':
     resolution: {integrity: sha512-kbT5wvNQlx7NaGjzPFu8nVIW1rWqV780O7ZtkjuWaPUgpv2NMFpjYERVi0UYj1msZNyCzGlaCWEtzc+exjMGbQ==}
     engines: {node: '>= 10.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@parcel/watcher-linux-x64-musl@2.5.6':
     resolution: {integrity: sha512-1JRFeC+h7RdXwldHzTsmdtYR/Ku8SylLgTU/reMuqdVD7CtLwf0VR1FqeprZ0eHQkO0vqsbvFLXUmYm/uNKJBg==}
     engines: {node: '>= 10.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@parcel/watcher-win32-arm64@2.5.6':
     resolution: {integrity: sha512-3ukyebjc6eGlw9yRt678DxVF7rjXatWiHvTXqphZLvo7aC5NdEgFufVwjFfY51ijYEWpXbqF5jtrK275z52D4Q==}
@@ -588,8 +582,8 @@ packages:
   '@types/geojson@7946.0.16':
     resolution: {integrity: sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==}
 
-  '@types/node@20.19.35':
-    resolution: {integrity: sha512-Uarfe6J91b9HAUXxjvSOdiO2UPOKLm07Q1oh0JHxoZ1y8HoqxDAu3gVrsrOHeiio0kSsoVBt4wFrKOm0dKxVPQ==}
+  '@types/node@25.9.1':
+    resolution: {integrity: sha512-xfrlY7UD5rMJk3ZVJP8BNzS28J36YJg+xp+LPXV1TdWxr8uMH5A860QNxYDGQe/ylDSgjxE52Q9VnO7p75tJxg==}
 
   '@types/pug@2.0.10':
     resolution: {integrity: sha512-Sk/uYFOBAB7mb74XcpizmH0KOR2Pv3D2Hmrh1Dmy5BmK3MpdSa5kqZcg6EKBdklU0bFXX9gCfzvpnyUehrPIuA==}
@@ -1535,8 +1529,8 @@ packages:
   ufo@1.6.3:
     resolution: {integrity: sha512-yDJTmhydvl5lJzBmy/hyOAA0d+aqCBuwl818haVdYCRrWV84o7YyeVm4QlVHStqNrrJSTb6jKuFAVqAFsr+K3Q==}
 
-  undici-types@6.21.0:
-    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+  undici-types@7.24.6:
+    resolution: {integrity: sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg==}
 
   universalify@2.0.1:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
@@ -1898,26 +1892,26 @@ snapshots:
 
   '@stripe/stripe-js@4.10.0': {}
 
-  '@sveltejs/vite-plugin-svelte-inspector@1.0.4(@sveltejs/vite-plugin-svelte@2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3)))(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))':
+  '@sveltejs/vite-plugin-svelte-inspector@1.0.4(@sveltejs/vite-plugin-svelte@2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3)))(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))':
     dependencies:
-      '@sveltejs/vite-plugin-svelte': 2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+      '@sveltejs/vite-plugin-svelte': 2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
       debug: 4.4.3
       svelte: 3.59.2
-      vite: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
+      vite: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
     transitivePeerDependencies:
       - supports-color
 
-  '@sveltejs/vite-plugin-svelte@2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))':
+  '@sveltejs/vite-plugin-svelte@2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))':
     dependencies:
-      '@sveltejs/vite-plugin-svelte-inspector': 1.0.4(@sveltejs/vite-plugin-svelte@2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3)))(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+      '@sveltejs/vite-plugin-svelte-inspector': 1.0.4(@sveltejs/vite-plugin-svelte@2.5.3(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3)))(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
       debug: 4.4.3
       deepmerge: 4.3.1
       kleur: 4.1.5
       magic-string: 0.30.21
       svelte: 3.59.2
       svelte-hmr: 0.15.3(svelte@3.59.2)
-      vite: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
-      vitefu: 0.2.5(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+      vite: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
+      vitefu: 0.2.5(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
     transitivePeerDependencies:
       - supports-color
 
@@ -1936,14 +1930,14 @@ snapshots:
     dependencies:
       svelte: 3.59.2
 
-  '@testing-library/svelte@5.3.1(svelte@3.59.2)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))(vitest@4.1.6(@types/node@20.19.35)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3)))':
+  '@testing-library/svelte@5.3.1(svelte@3.59.2)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))(vitest@4.1.6(@types/node@25.9.1)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3)))':
     dependencies:
       '@testing-library/dom': 10.4.1
       '@testing-library/svelte-core': 1.0.0(svelte@3.59.2)
       svelte: 3.59.2
     optionalDependencies:
-      vite: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
-      vitest: 4.1.6(@types/node@20.19.35)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+      vite: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
+      vitest: 4.1.6(@types/node@25.9.1)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
 
   '@tsconfig/svelte@4.0.1': {}
 
@@ -2077,15 +2071,15 @@ snapshots:
 
   '@types/geojson@7946.0.16': {}
 
-  '@types/node@20.19.35':
+  '@types/node@25.9.1':
     dependencies:
-      undici-types: 6.21.0
+      undici-types: 7.24.6
 
   '@types/pug@2.0.10': {}
 
   '@types/qrcode@1.5.6':
     dependencies:
-      '@types/node': 20.19.35
+      '@types/node': 25.9.1
 
   '@vitest/expect@4.1.6':
     dependencies:
@@ -2096,13 +2090,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.6(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))':
+  '@vitest/mocker@4.1.6(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))':
     dependencies:
       '@vitest/spy': 4.1.6
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
+      vite: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
 
   '@vitest/pretty-format@4.1.6':
     dependencies:
@@ -2986,7 +2980,7 @@ snapshots:
 
   ufo@1.6.3: {}
 
-  undici-types@6.21.0: {}
+  undici-types@7.24.6: {}
 
   universalify@2.0.1: {}
 
@@ -3015,33 +3009,33 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  vite-plugin-compression@0.5.1(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3)):
+  vite-plugin-compression@0.5.1(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3)):
     dependencies:
       chalk: 4.1.2
       debug: 4.4.3
       fs-extra: 10.1.0
-      vite: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
+      vite: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
     transitivePeerDependencies:
       - supports-color
 
-  vite@4.5.14(@types/node@20.19.35)(sass@1.97.3):
+  vite@4.5.14(@types/node@25.9.1)(sass@1.97.3):
     dependencies:
       esbuild: 0.27.3
       postcss: 8.5.14
       rollup: 3.30.0
     optionalDependencies:
-      '@types/node': 20.19.35
+      '@types/node': 25.9.1
       fsevents: 2.3.3
       sass: 1.97.3
 
-  vitefu@0.2.5(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3)):
+  vitefu@0.2.5(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3)):
     optionalDependencies:
-      vite: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
+      vite: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
 
-  vitest@4.1.6(@types/node@20.19.35)(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3)):
+  vitest@4.1.6(@types/node@25.9.1)(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3)):
     dependencies:
       '@vitest/expect': 4.1.6
-      '@vitest/mocker': 4.1.6(vite@4.5.14(@types/node@20.19.35)(sass@1.97.3))
+      '@vitest/mocker': 4.1.6(vite@4.5.14(@types/node@25.9.1)(sass@1.97.3))
       '@vitest/pretty-format': 4.1.6
       '@vitest/runner': 4.1.6
       '@vitest/snapshot': 4.1.6
@@ -3058,10 +3052,10 @@ snapshots:
       tinyexec: 1.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.1.0
-      vite: 4.5.14(@types/node@20.19.35)(sass@1.97.3)
+      vite: 4.5.14(@types/node@25.9.1)(sass@1.97.3)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 20.19.35
+      '@types/node': 25.9.1
     transitivePeerDependencies:
       - msw
 
