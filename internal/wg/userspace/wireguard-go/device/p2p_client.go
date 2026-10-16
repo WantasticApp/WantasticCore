@@ -512,14 +512,7 @@ func (c *P2PClient) sendToServer(msg *P2PMessage) {
 }
 
 func (c *P2PClient) sendP2PMessage(peer *Peer, msg *P2PMessage) {
-	encoded := msg.Encode()
-	// Use 4-byte LE uint32 header like all other WireGuard message types
-	// receive.go reads: binary.LittleEndian.Uint32(packet[:4])
-	packet := make([]byte, 4+len(encoded))
-	binary.LittleEndian.PutUint32(packet[:4], MessageP2PType)
-	copy(packet[4:], encoded)
-
-	peer.SendBuffers([][]byte{packet})
+	peer.SendP2PControl(msg.Encode())
 }
 
 func (c *P2PClient) HandlePunch(packet []byte, addr *net.UDPAddr) {

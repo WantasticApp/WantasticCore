@@ -85,16 +85,16 @@ func (peer *Peer) SendTUNControl(data []byte) {
 		return
 	}
 
-	elem := peer.device.NewOutboundElement()
-	elem.msgType = MessageTUNControlType
-
-	if len(data) > 1200 {
+	framed, err := frameTUNControlPayload(data)
+	if err != nil {
 		peer.device.log.Errorf("%v - TUN Control payload too large: %d (Max ~1200)", peer, len(data))
 		return
 	}
 
-	copy(elem.buffer[MessageTransportHeaderSize:], data)
-	elem.packet = elem.buffer[MessageTransportHeaderSize : MessageTransportHeaderSize+len(data)]
+	elem := peer.device.NewOutboundElement()
+	elem.msgType = MessageTUNControlType
+	copy(elem.buffer[MessageTransportHeaderSize:], framed)
+	elem.packet = elem.buffer[MessageTransportHeaderSize : MessageTransportHeaderSize+len(framed)]
 
 	elemsContainer := peer.device.GetOutboundElementsContainer()
 	elemsContainer.elems = append(elemsContainer.elems, elem)
@@ -109,6 +109,32 @@ func (peer *Peer) SendTUNControl(data []byte) {
 		return
 	}
 
+	peer.SendStagedPackets()
+}
+
+func (peer *Peer) SendP2PControl(data []byte) {
+	if !peer.isRunning.Load() {
+		return
+	}
+	framed, err := frameP2PControlPayload(data)
+	if err != nil {
+		peer.device.log.Errorf("%v - P2P control payload rejected: %v", peer, err)
+		return
+	}
+	elem := peer.device.NewOutboundElement()
+	elem.msgType = MessageP2PControlType
+	copy(elem.buffer[MessageTransportHeaderSize:], framed)
+	elem.packet = elem.buffer[MessageTransportHeaderSize : MessageTransportHeaderSize+len(framed)]
+	elemsContainer := peer.device.GetOutboundElementsContainer()
+	elemsContainer.elems = append(elemsContainer.elems, elem)
+	select {
+	case peer.queue.staged <- elemsContainer:
+	default:
+		peer.device.PutMessageBuffer(elem.buffer)
+		peer.device.PutOutboundElement(elem)
+		peer.device.PutOutboundElementsContainer(elemsContainer)
+		return
+	}
 	peer.SendStagedPackets()
 }
 

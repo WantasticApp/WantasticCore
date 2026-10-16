@@ -32,7 +32,7 @@ type QueueInboundElement struct {
 	counter  uint64
 	keypair  *Keypair
 	endpoint conn.Endpoint
-	isWUSP   bool
+	msgType  uint32
 }
 
 type QueueInboundElementsContainer struct {
@@ -49,7 +49,7 @@ func (elem *QueueInboundElement) clearPointers() {
 	elem.packet = nil
 	elem.keypair = nil
 	elem.endpoint = nil
-	elem.isWUSP = false
+	elem.msgType = 0
 }
 
 /* Called when a new authenticated message has been received
@@ -143,7 +143,7 @@ func (device *Device) RoutineReceiveIncoming(maxBatchSize int, recv conn.Receive
 
 			// check if transport
 
-			case MessageTransportType, MessageWUSPType:
+			case MessageTransportType, MessageTUNControlType, MessageWUSPType, MessageP2PControlType:
 
 				// check size
 
@@ -176,7 +176,7 @@ func (device *Device) RoutineReceiveIncoming(maxBatchSize int, recv conn.Receive
 				elem.keypair = keypair
 				elem.endpoint = endpoints[i]
 				elem.counter = 0
-				elem.isWUSP = (msgType == MessageWUSPType)
+				elem.msgType = msgType
 
 				elemsForPeer, ok := elemsByPeer[peer]
 				if !ok {
@@ -226,87 +226,7 @@ func (device *Device) RoutineReceiveIncoming(maxBatchSize int, recv conn.Receive
 					continue
 				}
 
-				if len(p2pData) < 84 {
-					continue
-				}
-
-				// Handle P2P message
-				// We need to capture the source address
-				endpointStr := endpoints[i].DstToString()
-				srcAddr, err := net.ResolveUDPAddr("udp", endpointStr)
-				if err != nil {
-					device.log.Verbosef("Failed to resolve P2P source addr: %v", err)
-					// Release buffer
-					bufsArrs[i] = device.GetMessageBuffer()
-					bufs[i] = bufsArrs[i][:]
-					continue
-				}
-
-				// Copy packet data as buffer is reused
-				msgData := make([]byte, len(p2pData))
-				copy(msgData, p2pData)
-
-				// Decode
-				msg := DecodeP2PMessage(msgData)
-				if msg == nil {
-					// Release buffer
-					bufsArrs[i] = device.GetMessageBuffer()
-					bufs[i] = bufsArrs[i][:]
-					continue
-				}
-
-				// Route to appropriate handler in goroutine
-				go func(m *P2PMessage, addr *net.UDPAddr) {
-					if device.coordinator != nil {
-						// Look up peer for coordinator
-						var key NoisePublicKey
-						copy(key[:], m.PublicKey[:])
-						peer := device.LookupPeer(key)
-
-						if peer != nil {
-							device.coordinator.HandleP2PMessage(peer, m, addr)
-						} else {
-							device.log.Verbosef("Coordinator received P2P message from unknown peer: %v", key)
-						}
-					}
-
-					if device.p2pClient != nil {
-						device.p2pClient.HandleMessage(m)
-					}
-				}(msg, srcAddr)
-
-				// Release buffer
-				bufsArrs[i] = device.GetMessageBuffer()
-				bufs[i] = bufsArrs[i][:]
 				continue
-
-			case MessageTUNControlType:
-				// P2P TUN mode coordination for exit node functionality
-				// Format: [4-byte type][payload...]
-				if len(packet) < 8 {
-					continue
-				}
-				tunData := packet[4:]
-				if peer := device.LookupPeerByEndpoint(endpoints[i]); peer != nil {
-					if device.tunControlHandler != nil {
-						msgData := make([]byte, len(tunData))
-						copy(msgData, tunData)
-						go device.tunControlHandler(peer, msgData)
-					}
-					if device.coordinator != nil {
-						msgData := make([]byte, len(tunData))
-						copy(msgData, tunData)
-						go device.coordinator.HandleTUNControl(peer, msgData)
-					}
-				}
-				bufsArrs[i] = device.GetMessageBuffer()
-				bufs[i] = bufsArrs[i][:]
-				continue
-
-			// MessageWUSPType (8) is handled like MessageTransportType above:
-			// it is encrypted with the session keypair and decrypted in
-			// RoutineSequentialReceiver, where elem.isWUSP distinguishes it
-			// from regular IP transport so it is dispatched to wuspHandler.
 
 			default:
 				device.log.Verbosef("Received message with unknown type")
@@ -569,28 +489,6 @@ func (peer *Peer) RoutineSequentialReceiver(maxBatchSize int) {
 				continue
 			}
 
-			// check for WUSP control (decrypted; dispatch before IP routing)
-			if elem.isWUSP {
-				device.log.Verbosef("%v - Received WUSP packet: %d bytes (decrypted)", peer, len(elem.packet))
-				// Promote keypair and flush staged packets — without this, the
-				// controller's staged WUSP probes would never be sent when the
-				// agent's first post-handshake packet is a WUSP message (not a
-				// plain-IP keepalive).
-				if peer.ReceivedWithKeypair(elem.keypair) {
-					peer.SetEndpointFromPacket(elem.endpoint)
-					peer.timersHandshakeComplete()
-					peer.SendStagedPackets()
-					if device.peerSessionConfirmedHandler != nil {
-						go device.peerSessionConfirmedHandler(peer)
-					}
-				}
-				if device.wuspHandler != nil {
-					payload := append([]byte(nil), elem.packet...)
-					go device.wuspHandler(peer, payload)
-				}
-				continue
-			}
-
 			if !elem.keypair.replayFilter.ValidateCounter(elem.counter, RejectAfterMessages) {
 				continue
 			}
@@ -605,6 +503,50 @@ func (peer *Peer) RoutineSequentialReceiver(maxBatchSize int) {
 				}
 			}
 			rxBytesLen += uint64(len(elem.packet) + MinMessageSize)
+
+			switch elem.msgType {
+			case MessageP2PControlType:
+				payload, err := consumeP2PControlPayload(elem.packet)
+				if err != nil {
+					device.log.Verbosef("%v - Dropping malformed P2P control packet: %v", peer, err)
+					continue
+				}
+				msg := DecodeP2PMessage(payload)
+				if msg == nil {
+					continue
+				}
+				var claimedKey NoisePublicKey
+				copy(claimedKey[:], msg.PublicKey[:])
+				if device.coordinator != nil && claimedKey.Equals(peer.PublicKey()) {
+					endpoint, err := net.ResolveUDPAddr("udp", elem.endpoint.DstToString())
+					if err == nil {
+						go device.coordinator.HandleP2PMessage(peer, msg, endpoint)
+					}
+				}
+				if device.p2pClient != nil {
+					go device.p2pClient.HandleMessage(msg)
+				}
+				continue
+			case MessageTUNControlType:
+				payload, err := consumeTUNControlPayload(elem.packet)
+				if err != nil {
+					device.log.Verbosef("%v - Dropping malformed TUN control packet: %v", peer, err)
+					continue
+				}
+				if device.tunControlHandler != nil {
+					go device.tunControlHandler(peer, append([]byte(nil), payload...))
+				}
+				if device.coordinator != nil {
+					go device.coordinator.HandleTUNControl(peer, append([]byte(nil), payload...))
+				}
+				continue
+			case MessageWUSPType:
+				device.log.Verbosef("%v - Received WUSP packet: %d bytes (decrypted)", peer, len(elem.packet))
+				if device.wuspHandler != nil {
+					go device.wuspHandler(peer, append([]byte(nil), elem.packet...))
+				}
+				continue
+			}
 
 			if len(elem.packet) == 0 {
 				device.log.Verbosef("%v - Receiving keepalive packet", peer)

@@ -85,6 +85,21 @@ func (c *Coordinator) Close() {
 	})
 }
 
+// ExitNodeAvailable reports whether a live P2P peer is explicitly advertising
+// exit-node service. Callers must not assign a peer based only on connectivity.
+func (c *Coordinator) ExitNodeAvailable(publicKey NoisePublicKey) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	entry := c.peers[publicKey]
+	return entry != nil &&
+		entry.Peer != nil &&
+		entry.Peer.isRunning.Load() &&
+		entry.P2PCapable &&
+		entry.OfferExitNode &&
+		time.Since(entry.LastSeen) <= coordinatorPeerListFreshTTL
+}
+
 // HandleP2PMessage processes MessageP2PType (type 6)
 func (c *Coordinator) HandleP2PMessage(peer *Peer, msg *P2PMessage, srcAddr *net.UDPAddr) {
 	// Update or create registry entry
@@ -248,9 +263,9 @@ func (c *Coordinator) handlePunchRequest(requester *Peer, reqEntry *PeerRegistry
 	}
 	copy(resp1.PublicKey[:], c.device.staticIdentity.publicKey[:])
 	copy(resp1.Nonce[:], nonce)
-		if shouldAdvertiseLocalAddr(target.LocalAddr, target.AssignedIP) {
-			resp1.SetLocalAddr(&target.LocalAddr)
-		}
+	if shouldAdvertiseLocalAddr(target.LocalAddr, target.AssignedIP) {
+		resp1.SetLocalAddr(&target.LocalAddr)
+	}
 	resp1.SetObservedAddr(&target.ObservedAddr)
 
 	c.sendP2PMessage(requester, resp1)
@@ -262,9 +277,9 @@ func (c *Coordinator) handlePunchRequest(requester *Peer, reqEntry *PeerRegistry
 	}
 	copy(resp2.PublicKey[:], c.device.staticIdentity.publicKey[:])
 	copy(resp2.Nonce[:], nonce)
-		if shouldAdvertiseLocalAddr(reqEntry.LocalAddr, reqEntry.AssignedIP) {
-			resp2.SetLocalAddr(&reqEntry.LocalAddr)
-		}
+	if shouldAdvertiseLocalAddr(reqEntry.LocalAddr, reqEntry.AssignedIP) {
+		resp2.SetLocalAddr(&reqEntry.LocalAddr)
+	}
 	resp2.SetObservedAddr(&reqEntry.ObservedAddr)
 
 	c.sendP2PMessage(target.Peer, resp2)
@@ -285,17 +300,7 @@ func (c *Coordinator) assessNAT(entry *PeerRegistryEntry) {
 }
 
 func (c *Coordinator) sendP2PMessage(peer *Peer, msg *P2PMessage) {
-	// Send as MessageP2PType (type 6) directly via UDP
-	// This skips the encryption queue and sends cleartext/encoded control message
-
-	encoded := msg.Encode()
-	// Use 4-byte LE uint32 header like all other WireGuard message types
-	// receive.go reads: binary.LittleEndian.Uint32(packet[:4])
-	packet := make([]byte, 4+len(encoded))
-	binary.LittleEndian.PutUint32(packet[:4], MessageP2PType)
-	copy(packet[4:], encoded)
-
-	peer.SendBuffers([][]byte{packet})
+	peer.SendP2PControl(msg.Encode())
 }
 
 func (c *Coordinator) janitorLoop() {

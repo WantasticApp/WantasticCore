@@ -61,6 +61,7 @@ const (
 	MessageP2PType         = 6 // P2P coordination and NAT traversal
 	MessageTUNControlType  = 7 // P2P TUN mode coordination for exit node
 	MessageWUSPType        = 8 // Wantastic USP device management control plane
+	MessageP2PControlType  = 9 // Authenticated P2P coordination over encrypted transport
 )
 
 const (

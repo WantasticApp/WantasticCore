@@ -3956,34 +3956,6 @@ func (s *TenantPortalServiceServer) AssignExitNode(ctx context.Context, req *pro
 		return nil, errs.InvalidArgumentf("tenant device cannot be assigned as an entry node")
 	}
 
-	// If entry node is empty, just tell the exit node to enable exit node mode
-	if req.EntryNodeId == "" {
-		exitKeyBytes, err := base64.StdEncoding.DecodeString(req.ExitNodeId)
-		if err != nil {
-			return nil, errs.InvalidArgumentf("invalid base64 for exit_node_id: %v", err)
-		}
-		var exitPk device.NoisePublicKey
-		copy(exitPk[:], exitKeyBytes)
-
-		wgExitPeer := td.Device.LookupPeer(exitPk)
-		if wgExitPeer == nil {
-			return nil, errs.NotFoundf("exit peer not actively connected")
-		}
-
-		payload := `{"action":"enable_exit_node"}`
-		wgExitPeer.SendTUNControl([]byte(payload))
-
-		log.Info().
-			Str("tenant_id", req.AccountId).
-			Str("exit_node", req.ExitNodeId).
-			Msg("Dispatched Enable Exit Node TUN control")
-
-		return &proto.AssignExitNodeResponse{
-			Success: true,
-			Message: "Exit node enabled",
-		}, nil
-	}
-
 	// If entry node is provided, verify it
 	_, err = s.server.GetPeer(overlayAccountID, req.EntryNodeId)
 	if err != nil {
@@ -3998,12 +3970,12 @@ func (s *TenantPortalServiceServer) AssignExitNode(ctx context.Context, req *pro
 	}
 
 	// Get active WireGuard Peer reference for the entry node
-	keyBytes, err := base64.StdEncoding.DecodeString(req.EntryNodeId)
+	entryKey, err := wgtypes.ParseKey(req.EntryNodeId)
 	if err != nil {
-		return nil, errs.InvalidArgumentf("invalid base64 for entry_node_id: %v", err)
+		return nil, errs.InvalidArgumentf("invalid entry_node_id: %v", err)
 	}
 	var pk device.NoisePublicKey
-	copy(pk[:], keyBytes)
+	copy(pk[:], entryKey[:])
 
 	wgPeer := td.Device.LookupPeer(pk)
 	if wgPeer == nil {
@@ -4011,17 +3983,25 @@ func (s *TenantPortalServiceServer) AssignExitNode(ctx context.Context, req *pro
 		return nil, errs.NotFoundf("entry peer not actively connected")
 	}
 
-	// Construct JSON payload
-	exitIP := ""
-	if len(exitPeer.AllowedIPs) > 0 {
-		exitIP = strings.Split(exitPeer.AllowedIPs[0], "/")[0]
+	exitKey, err := wgtypes.ParseKey(req.ExitNodeId)
+	if err != nil {
+		return nil, errs.InvalidArgumentf("invalid exit_node_id: %v", err)
+	}
+	var exitPk device.NoisePublicKey
+	copy(exitPk[:], exitKey[:])
+	wgExitPeer := td.Device.LookupPeer(exitPk)
+	if wgExitPeer == nil {
+		return nil, errs.NotFoundf("exit peer not actively connected")
+	}
+	coordinator := td.Device.GetCoordinator()
+	if coordinator == nil || !coordinator.ExitNodeAvailable(exitPk) {
+		return nil, errs.FailedPreconditionf("selected device is not advertising exit-node service")
 	}
 
-	payload := fmt.Sprintf(`{"action":"set_exit_node","exit_node_public_key":"%s","exit_node_endpoint":"%s","exit_node_ip":"%s"}`,
-		req.ExitNodeId, exitPeer.Endpoint, exitIP)
-
-	// Dispatch TUN control message to entry node
-	wgPeer.SendTUNControl([]byte(payload))
+	// Both commands use the authenticated binary TUN-control protocol. The
+	// exit node is activated only after its P2P advertisement was verified.
+	wgExitPeer.SendTUNControl(device.EncodeEnableExitNodeTUNControl())
+	wgPeer.SendTUNControl(device.EncodeUseExitNodeTUNControl(exitPk))
 
 	log.Info().
 		Str("tenant_id", req.AccountId).
