@@ -13,7 +13,7 @@ require (
 	github.com/nyaruka/phonenumbers v1.7.5
 	github.com/rs/zerolog v1.34.0
 	github.com/srlehn/termimg v0.0.7
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/swoga/go-routeros v1.2.0
 	github.com/xlzd/gotp v0.1.0
 	go.mau.fi/whatsmeow v0.0.0-20260410162419-b95d92207080
@@ -33,7 +33,6 @@ require (
 	github.com/bamiaux/rez v0.0.0-20170731184118-29f4463c688b // indirect
 	github.com/beeper/argo-go v1.1.2 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elliotchance/orderedmap/v3 v3.1.0 // indirect
@@ -51,7 +50,6 @@ require (
 	github.com/mattn/go-tty v0.0.7 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/petermattis/goid v0.0.0-20260113132338-7c7de50cc741 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rkoesters/xdg v0.0.1 // indirect
@@ -76,6 +74,7 @@ require (
 	go.mau.fi/libsignal v0.2.1 // indirect
 	go.mau.fi/util v0.9.6 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/image v0.39.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
